@@ -1,0 +1,90 @@
+name: demos
+
+# Proves both QUIC demos end-to-end on Node: builds Rust -> wasm32-unknown-emscripten
+# via the patched toolchain and does a real HTTP/3 GET to cloudflare-quic.com.
+#
+# Runner: macOS. setup.sh clones the guybedford emscripten `cf` fork (the patched
+# frontend) and borrows its LLVM/binaryen/node backend from Homebrew's emscripten
+# (auto-detected). emsdk is not used — it has no prebuilt backend for these
+# versions on Apple Silicon, which the macos runners are.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  demos:
+    name: build + run quinn & quiche demos (macOS)
+    runs-on: macos-14
+    timeout-minutes: 75
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node >= 24 (26 recommended): JSPI + node:dgram bindSync/connectSync. Used to
+      # RUN the demos, and as the backend NODE_JS (setup.sh uses `node` from PATH).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+
+      # Rust 1.95 (workers-rs pins it via rust-toolchain.toml) + the emscripten target.
+      - name: Install Rust 1.95 + wasm32-unknown-emscripten
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --target wasm32-unknown-emscripten
+          rustup default 1.95.0
+          rustc -V && cargo -V
+
+      - name: Install toolchain deps (emscripten backend, libclang, cmake)
+        run: |
+          brew update
+          # `emscripten` provides the LLVM/binaryen backend the cf fork's emcc drives
+          # (setup.sh auto-detects it via `brew --prefix emscripten`); `llvm` provides
+          # a libclang.dylib for boring-sys bindgen; `cmake` builds BoringSSL.
+          brew install emscripten llvm cmake
+
+      # Cache the heavy, deterministic setup output (forks, patched wasm-bindgen
+      # CLI, BoringSSL-for-wasm) keyed on the inputs that affect it.
+      - name: Cache .work (forks + toolchain + BoringSSL)
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.work
+          key: rwq-work-${{ runner.os }}-${{ hashFiles('scripts/setup.sh', 'patches/**', 'docs/branch-map.md') }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: rwq-cargo-${{ runner.os }}-${{ hashFiles('demos/**/Cargo.toml') }}
+
+      - name: Setup (clone forks, apply patches, build wasm-bindgen CLI, BoringSSL)
+        run: bash scripts/setup.sh
+
+      - name: quinn demo — HTTP/3 GET to cloudflare-quic.com
+        run: |
+          set -o pipefail
+          bash scripts/run-quinn_h3.sh 2>&1 | tee run-quinn.log
+          grep -q 'QUIC-H3-ON-EMSCRIPTEN-OK' run-quinn.log
+
+      - name: quiche demo — HTTP/3 GET to cloudflare-quic.com
+        run: |
+          set -o pipefail
+          bash scripts/run-quiche.sh 2>&1 | tee run-quiche.log
+          grep -q 'QUIC-H3-QUICHE-ON-EMSCRIPTEN-OK' run-quiche.log
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-logs
+          path: |
+            run-quinn.log
+            run-quiche.log
+          if-no-files-found: ignore

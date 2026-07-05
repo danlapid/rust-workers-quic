@@ -1,0 +1,23 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 1aa40ee..4ac7f57 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -43,7 +43,7 @@ publish = false
+ [workspace.dependencies]
+ anyhow = { version = "1" }
+ assert_matches = { version = "1" }
+-boring = { version = "4.3" }
++boring = { path = "../boring/boring" }
+ buffer-pool = { version = "0.2.1", path = "./buffer-pool" }
+ bytes = { version = "1.11.1" }
+ crossbeam = { version = "0.8.1", default-features = false }
+diff --git a/quiche/Cargo.toml b/quiche/Cargo.toml
+index c6ce7cb..d2f459f 100644
+--- a/quiche/Cargo.toml
++++ b/quiche/Cargo.toml
+@@ -99,4 +99,4 @@ rstest = { workspace = true }
+ url = { workspace = true }
+ 
+ [lib]
+-crate-type = ["lib", "staticlib", "cdylib"]
++crate-type = ["lib"]

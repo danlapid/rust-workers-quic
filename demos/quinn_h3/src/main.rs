@@ -105,16 +105,9 @@ impl quinn::UdpPoller for EmscriptenPoller {
     }
 }
 
-// ===== POC-only cert verifier =====
-//
-// Logs the presented chain and accepts it. This exists ONLY to prove the QUIC +
-// TLS transport works end-to-end on emscripten/Node; signatures are still
-// checked via the ring provider, but the trust-anchor path is not enforced.
-// DO NOT ship this — production must use the webpki verifier (set STRICT_VERIFY,
-// see below). The signature over the handshake (CertificateVerify, the server
-// leaf's key) IS still checked by ring; only the trust-anchor path is accepted —
-// which is what lets us demonstrate the transport behind a TLS-inspecting proxy
-// (e.g. a Zero-Trust VPN) whose private CA a public root store won't chain to.
+// POC-only cert verifier: ring still checks the handshake signature (the server
+// leaf's key); only the trust-anchor path is accepted. DO NOT ship this —
+// production must set STRICT_VERIFY (see the toggle below for the full rationale).
 #[derive(Debug)]
 struct LoggingAcceptVerifier {
     provider: Arc<rustls::crypto::CryptoProvider>,

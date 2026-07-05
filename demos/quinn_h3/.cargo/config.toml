@@ -1,0 +1,36 @@
+[build]
+target = "wasm32-unknown-emscripten"
+
+[target.wasm32-unknown-emscripten]
+rustflags = [
+    # Build with the emscripten default `panic = "unwind"`: tokio's emscripten
+    # runtime drives task panics through Rust unwinding (caught by the task
+    # harness and surfaced as `JoinError` / a rejected Promise), so abort would
+    # break that contract and mask panics.
+    #
+    # Static relocation model is the only one emcc fully supports for our
+    # staticlib + post-link pipeline.
+    "-Crelocation-model=static",
+    # tokio's `wasm32-unknown-emscripten` runtime is gated behind this cfg.
+    "--cfg=tokio_unstable",
+    # emcc link-only settings, scoped to the final emcc link step (not compiles).
+    #   * WASM_BINDGEN=auto  run wasm-bindgen as a post-link step.
+    #   * MODULARIZE=instance/EXPORT_ES6  ESM output shape.
+    #   * AUTO_INIT/ENVIRONMENT=node  node bootstrap.
+    #   * NODERAWSOCKETS  back the socket layer with node net/dgram.
+    "-Clink-arg=-sWASM_BINDGEN=auto",
+    "-Clink-arg=-sMODULARIZE=instance",
+    "-Clink-arg=-sEXPORT_ES6",
+    "-Clink-arg=-sAUTO_INIT",
+    # SOURCE_PHASE_IMPORTS is browser-only/experimental and trips emscripten's
+    # acorn DCE walker on the wasm-bindgen ESM output under Node; omit it.
+    "-Clink-arg=-sENVIRONMENT=node",
+    "-Clink-arg=-sNODERAWSOCKETS",
+    # With ASSERTIONS on (the -O0 default), emscripten misdetects the env; disable
+    # to hardcode ENVIRONMENT_IS_NODE = true.
+    "-Clink-arg=-sASSERTIONS=0",
+    # Give the stack room (regex-automata's meta DFA build recurses deeply) and
+    # let the heap grow for the QUIC/TLS stack.
+    "-Clink-arg=-sSTACK_SIZE=8MB",
+    "-Clink-arg=-sALLOW_MEMORY_GROWTH=1",
+]

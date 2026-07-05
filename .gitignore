@@ -14,7 +14,6 @@ node_modules/
 # Secrets / machine-specific — never commit
 *.pem
 .emscripten_cf
-scripts/env.sh
 
 # Misc
 *.log

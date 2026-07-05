@@ -1,0 +1,19 @@
+diff --git a/src/unix/linux_like/emscripten/mod.rs b/src/unix/linux_like/emscripten/mod.rs
+index 8a57a321..0f4f0b31 100644
+--- a/src/unix/linux_like/emscripten/mod.rs
++++ b/src/unix/linux_like/emscripten/mod.rs
+@@ -212,6 +212,14 @@ s! {
+         pub cmsg_type: c_int,
+     }
+ 
++    // musl defines this (bits/socket.h) but the emscripten module was missing it,
++    // so `unix`-portable code using IPV6_PKTINFO (e.g. quinn-udp's unix.rs) failed
++    // to compile. `in_pktinfo` is already inherited from linux_like/mod.rs.
++    pub struct in6_pktinfo {
++        pub ipi6_addr: crate::in6_addr,
++        pub ipi6_ifindex: c_uint,
++    }
++
+     pub struct sem_t {
+         __val: [c_int; 4],
+     }

@@ -1,15 +1,23 @@
 Patch against guybedford/workers-rs @ emscripten root Cargo.toml.
 
-Two changes for a minimal QUIC build:
-  1. Add a `[patch.crates-io]` entry routing `quinn-udp` to our patched copy
-     (see quinn-udp-emscripten-fallback.patch).
-  2. Drop the goose-only patches (arboard/fs2/sys-info/tree-sitter) and exclude the
-     `emscripten-goose` example, so the workspace resolves without those submodules.
+Detaches the unrelated `emscripten-goose` example (a clipboard/tree-sitter/sys-info
+demo the QUIC crates don't touch) from the workspace. This is REQUIRED, not cosmetic:
+goose's `tree-sitter` submodule points at `github.com/guybedford/tree-sitter`, which
+no longer exists ("Repository not found"), so its `tree-sitter.path` dependency can
+never resolve — a full-workspace resolve is impossible while goose is a member.
 
-Adjust the `quinn-udp.path` to wherever you place the patched quinn-udp checkout.
+Both hunks are load-bearing:
+  1. Exclude `examples/emscripten-goose` from the workspace members.
+  2. Drop the goose-only `[workspace.dependencies]` (arboard/fs2/sys-info/tree-sitter).
+     cargo *eagerly* loads workspace.dependency path sources even when unused, so
+     leaving them fails on the missing `./arboard` etc.; and goose inherits them via
+     `.workspace = true`, so it needs excluding once they're gone.
+
+(quinn-udp is NOT patched: its portable `unix.rs` compiles unmodified once the
+emscripten `libc` gains `in6_pktinfo` — see patches/libc-emscripten-in6_pktinfo.patch.)
 
 diff --git a/Cargo.toml b/Cargo.toml
-index 9a6a1d9..1c0031e 100644
+index 9a6a1d9..8e2df5b 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -12,6 +12,7 @@ members = [
@@ -20,7 +28,7 @@ index 9a6a1d9..1c0031e 100644
      "templates/*",
      "wasm-bindgen",
      "wasm-streams",
-@@ -119,17 +120,19 @@ wasm-bindgen-macro-support = { version = "0.2.121", path = "./wasm-bindgen/crate
+@@ -119,17 +120,15 @@ wasm-bindgen-macro-support = { version = "0.2.121", path = "./wasm-bindgen/crate
  wasm-bindgen-shared = { version = "0.2.121", path = "./wasm-bindgen/crates/shared" }
  wasm-bindgen-test = { version = "0.3.71", path = "./wasm-bindgen/crates/test" }
  web-sys = { version = "0.3.98", path = './wasm-bindgen/crates/web-sys' }
@@ -38,10 +46,6 @@ index 9a6a1d9..1c0031e 100644
 -# req.) carries that build.rs fix.
 -tree-sitter.path = "./tree-sitter/lib"
 -tree-sitter-language.path = "./tree-sitter/crates/language"
-+# quinn-udp is a hard dep of quinn but its unix path needs pktinfo cmsg structs
-+# emscripten's libc lacks. We never use it (abstract socket), so route emscripten
-+# to quinn-udp's fallback stub via this local patch.
-+quinn-udp.path = "../quinn-udp"
 +# --- goose-only patches (arboard/fs2/sys-info/tree-sitter) disabled for the
 +# --- QUIC POC; emscripten-goose is excluded from the workspace above.
 +# arboard.path = "./arboard"
