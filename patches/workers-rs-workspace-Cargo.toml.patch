@@ -1,0 +1,51 @@
+Patch against guybedford/workers-rs @ emscripten root Cargo.toml.
+
+Two changes for a minimal QUIC build:
+  1. Add a `[patch.crates-io]` entry routing `quinn-udp` to our patched copy
+     (see quinn-udp-emscripten-fallback.patch).
+  2. Drop the goose-only patches (arboard/fs2/sys-info/tree-sitter) and exclude the
+     `emscripten-goose` example, so the workspace resolves without those submodules.
+
+Adjust the `quinn-udp.path` to wherever you place the patched quinn-udp checkout.
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 9a6a1d9..1c0031e 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -12,6 +12,7 @@ members = [
+ exclude = [
+     "examples/coredump",
+     "examples/axum",
++    "examples/emscripten-goose",
+     "templates/*",
+     "wasm-bindgen",
+     "wasm-streams",
+@@ -119,17 +120,19 @@ wasm-bindgen-macro-support = { version = "0.2.121", path = "./wasm-bindgen/crate
+ wasm-bindgen-shared = { version = "0.2.121", path = "./wasm-bindgen/crates/shared" }
+ wasm-bindgen-test = { version = "0.3.71", path = "./wasm-bindgen/crates/test" }
+ web-sys = { version = "0.3.98", path = './wasm-bindgen/crates/web-sys' }
+-arboard.path = "./arboard"
+-fs2.path = "./fs2-rs"
+ libc.path = "./libc"
+ socket2.git = "https://github.com/rust-lang/socket2"
+-sys-info.path = "./sys-info"
+ ring.path = "./ring"
+ tokio-macros.path = "./tokio/tokio-macros"
+ tokio.path = "./tokio/tokio"
+-# Emscripten has a full libc, so tree-sitter must not compile its libc-less
+-# wasm shims (stdio/stdlib/...) — they duplicate `fwrite` et al. The local
+-# `tree-sitter` submodule (emscripten branch, v0.26.9 base — matching goose's
+-# req.) carries that build.rs fix.
+-tree-sitter.path = "./tree-sitter/lib"
+-tree-sitter-language.path = "./tree-sitter/crates/language"
++# quinn-udp is a hard dep of quinn but its unix path needs pktinfo cmsg structs
++# emscripten's libc lacks. We never use it (abstract socket), so route emscripten
++# to quinn-udp's fallback stub via this local patch.
++quinn-udp.path = "../quinn-udp"
++# --- goose-only patches (arboard/fs2/sys-info/tree-sitter) disabled for the
++# --- QUIC POC; emscripten-goose is excluded from the workspace above.
++# arboard.path = "./arboard"
++# fs2.path = "./fs2-rs"
++# sys-info.path = "./sys-info"
++# tree-sitter.path = "./tree-sitter/lib"
++# tree-sitter-language.path = "./tree-sitter/crates/language"

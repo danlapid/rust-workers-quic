@@ -1,0 +1,54 @@
+# The QUIC demo crate. It builds inside the patched workers-rs workspace (for
+# the wasm-bindgen fork + [patch.crates-io]); `scripts/run.sh` copies it in and
+# runs it. It is not meant to `cargo build` standalone from this directory.
+[package]
+name = "quic-demo"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "quic-demo"
+path = "src/main.rs"
+
+[dependencies]
+# wasm-bindgen family come from the workers-rs workspace (patched fork).
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+js-sys.workspace = true
+
+# The async substrate: the emscripten tokio (net = reactor UdpSocket + async DNS).
+tokio = { version = "1", default-features = false, features = [
+    "rt",
+    "macros",
+    "sync",
+    "time",
+    "net",
+    "io-util",
+] }
+
+# QUIC. We bypass quinn-udp by passing our own AsyncUdpSocket + TokioRuntime, so
+# only the proto + rustls glue matters. `rustls-ring` selects the ring crypto
+# backend (aws-lc-rs is intractable on emscripten).
+quinn = { version = "0.11", default-features = false, features = [
+    "rustls-ring",
+    "runtime-tokio",
+    "log",
+] }
+rustls = { version = "0.23", default-features = false, features = [
+    "ring",
+    "std",
+    "tls12",
+    "logging",
+] }
+webpki-roots = "1"
+
+# HTTP/3 on top of quinn (h3-quinn 0.0.10 targets quinn 0.11.7+).
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+http = "1"
+bytes = "1"
+
+anyhow = "1"
+
+[profile.release]
+opt-level = "s"

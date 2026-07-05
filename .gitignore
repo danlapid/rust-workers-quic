@@ -1,0 +1,21 @@
+# Vendored forks + toolchain (cloned by scripts/setup.sh, never committed)
+vendor/
+.work/
+
+# Build output
+target/
+**/target/
+node_modules/
+
+# Generated emscripten / wasm-bindgen output (the demo's .js/.wasm land in target/)
+*.wasm
+/quic-demo.js
+
+# Secrets / machine-specific — never commit
+*.pem
+.emscripten_cf
+scripts/env.sh
+
+# Misc
+*.log
+.DS_Store

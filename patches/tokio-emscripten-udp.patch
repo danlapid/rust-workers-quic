@@ -1,0 +1,36 @@
+diff --git a/tokio/src/net/mod.rs b/tokio/src/net/mod.rs
+index c7930c24..b4944f60 100644
+--- a/tokio/src/net/mod.rs
++++ b/tokio/src/net/mod.rs
+@@ -70,6 +70,12 @@ pub(crate) mod emscripten_dns;
+ mod reactor_stream;
+ #[cfg(all(feature = "net", target_os = "emscripten"))]
+ pub use emscripten::{TcpListener, TcpSocket, TcpStream};
++// Reactor-backed UDP over emscripten's `-sNODERAWSOCKETS` (node:dgram). This is
++// the datagram primitive the QUIC (quinn) stack rides on.
++#[cfg(all(feature = "net", target_os = "emscripten"))]
++mod udp_emscripten;
++#[cfg(all(feature = "net", target_os = "emscripten"))]
++pub use udp_emscripten::UdpSocket;
+ 
+ cfg_net_unix_not_emscripten! {
+     pub mod unix;
+diff --git a/tokio/src/net/reactor_stream.rs b/tokio/src/net/reactor_stream.rs
+index d0fa04bc..185dbc0e 100644
+--- a/tokio/src/net/reactor_stream.rs
++++ b/tokio/src/net/reactor_stream.rs
+@@ -79,6 +79,14 @@ impl ReactorStream {
+         self.io.registration().poll_read_io(cx, f)
+     }
+ 
++    pub(crate) fn poll_write_io<R>(
++        &self,
++        cx: &mut Context<'_>,
++        f: impl FnMut() -> io::Result<R>,
++    ) -> Poll<io::Result<R>> {
++        self.io.registration().poll_write_io(cx, f)
++    }
++
+     // ===== stream byte I/O =====
+ 
+     pub(crate) fn try_read(&self, buf: &mut [u8]) -> io::Result<usize> {
