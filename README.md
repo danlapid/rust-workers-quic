@@ -37,7 +37,7 @@ networking (epoll, async DNS, raw TCP/UDP sockets over `node:net`/`node:dgram`, 
 
 ```
   h3 (HTTP/3)  ──►  quinn (QUIC/TLS 1.3)
-     │   quinn-udp basic socket fallback
+     │   quinn-udp Unix socket path
      ▼
   tokio::net::UdpSocket        ← standard Tokio API over Guy's mio backend
      │   mio over the epoll reactor
@@ -53,10 +53,9 @@ TLS 1.3 is provided by **rustls + ring** in the quinn demo; the quiche demo uses
 ## Why quinn?
 
 `quinn` is the de-facto pure-Rust QUIC implementation, is `tokio`-native, and uses
-`rustls` — the exact TLS stack that already works on emscripten. Emscripten identifies as
-Unix but does not implement the `recvmmsg` syscall used by quinn-udp's Unix backend, so a
-small patch selects quinn-udp's existing basic socket fallback. This keeps Quinn's normal
-Tokio integration and needs no C crypto library.
+`rustls` — the exact TLS stack that already works on emscripten. A small Emscripten patch
+implements the `recvmmsg` syscall used by quinn-udp's normal Unix backend. This keeps
+Quinn and quinn-udp unmodified and needs no C crypto library.
 
 ## Also quiche (BoringSSL)
 
@@ -73,9 +72,9 @@ Emscripten.)
 
 | Path | What |
 | --- | --- |
-| `demos/quinn_h3/` | **The quinn demo.** `h3` + `quinn` using its normal Tokio runtime and quinn-udp's basic socket fallback, doing an HTTP/3 GET to `cloudflare-quic.com`. |
+| `demos/quinn_h3/` | **The quinn demo.** `h3` + `quinn` using its normal Tokio runtime and quinn-udp Unix backend, doing an HTTP/3 GET to `cloudflare-quic.com`. |
 | `demos/quiche/` | **The quiche demo.** `tokio-quiche` + BoringSSL over the Emscripten `tokio::net::UdpSocket`. |
-| `patches/` | Reproducible Emscripten compatibility patches for wasm-bindgen, quanta, quinn-udp, and tokio-quiche dependencies. |
+| `patches/` | Reproducible Emscripten compatibility patches for Emscripten, wasm-bindgen, quanta, and tokio-quiche dependencies. |
 | `cmake/boringssl-emscripten.cmake` | Selects BoringSSL's portable C implementation and loads the Emscripten CMake toolchain for Cargo's `boring-sys` build. |
 | `scripts/` | `setup.sh` (clone dependencies + apply patches + toolchain), `run-quinn_h3.sh` (quinn demo), `run-quiche.sh` (quiche demo). No user-supplied configuration is required. |
 | `.github/workflows/ci.yml` | CI that provisions the toolchain and runs **both** demos on macOS, asserting the success sentinels. |
@@ -83,7 +82,7 @@ Emscripten.)
 | `AGENTS.md` | Orientation + hard-won build knowledge for contributors and coding agents. |
 
 > Run `scripts/setup.sh` before building. It provisions five pinned Guy Bedford forks plus
-> pinned quanta, Quinn, and quiche checkouts under `.work`; Cargo fetches mio, socket2, and
+> pinned quanta and quiche checkouts under `.work`; Cargo fetches mio, socket2, quinn-udp, and
 > registry dependencies.
 > The run scripts set the target environment and execute the generated modules under Node.
 

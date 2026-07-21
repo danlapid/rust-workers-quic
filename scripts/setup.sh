@@ -25,8 +25,6 @@ RING_BRANCH="emscripten"
 RING_COMMIT="6671f7cfbb13f249b571ffa6326275a8596e0ca2"
 QUANTA_BRANCH="v0.12.6"
 QUANTA_COMMIT="0f81349c223854136113e634cf8dd6cd85569880"
-QUINN_BRANCH="quinn-udp-0.5.15"
-QUINN_COMMIT="a96949f6cd257c665f544626af4e8ce668a40b30"
 QUICHE_TOKIO_BRANCH="0.29.3"
 QUICHE_TOKIO_COMMIT="55886df3be579579207104c8e645825b6347a209"
 GB="https://github.com/guybedford"
@@ -46,11 +44,13 @@ pin() { # dir branch commit
 
 apply() { # dir patch
   local dir="$1" patch="$2"
+  PATCH_WAS_APPLIED=0
   if git -C "$dir" apply --reverse --check "$patch" 2>/dev/null; then
     echo "  already applied: $(basename "$patch")"
   else
     git -C "$dir" apply --check "$patch"
     git -C "$dir" apply "$patch"
+    PATCH_WAS_APPLIED=1
   fi
 }
 
@@ -61,7 +61,6 @@ clone "$GB/tokio" "$TOKIO_BRANCH" "$WORK/tokio"
 clone "$GB/libc" "$LIBC_BRANCH" "$WORK/libc"
 clone "$GB/ring" "$RING_BRANCH" "$WORK/ring"
 clone "https://github.com/metrics-rs/quanta" "$QUANTA_BRANCH" "$WORK/quanta"
-clone "https://github.com/quinn-rs/quinn" "$QUINN_BRANCH" "$WORK/quinn"
 clone "https://github.com/cloudflare/quiche" "$QUICHE_TOKIO_BRANCH" "$WORK/quiche-tokio"
 pin "$WORK/emscripten" "$EMSCRIPTEN_BRANCH" "$EMSCRIPTEN_COMMIT"
 pin "$WORK/wasm-bindgen" "$WASM_BINDGEN_BRANCH" "$WASM_BINDGEN_COMMIT"
@@ -69,17 +68,17 @@ pin "$WORK/tokio" "$TOKIO_BRANCH" "$TOKIO_COMMIT"
 pin "$WORK/libc" "$LIBC_BRANCH" "$LIBC_COMMIT"
 pin "$WORK/ring" "$RING_BRANCH" "$RING_COMMIT"
 pin "$WORK/quanta" "$QUANTA_BRANCH" "$QUANTA_COMMIT"
-pin "$WORK/quinn" "$QUINN_BRANCH" "$QUINN_COMMIT"
 pin "$WORK/quiche-tokio" "$QUICHE_TOKIO_BRANCH" "$QUICHE_TOKIO_COMMIT"
+
+echo "==> Enabling recvmmsg over the Node socket backend"
+apply "$WORK/emscripten" "$REPO/patches/emscripten-recvmmsg.patch"
+EMSCRIPTEN_PATCH_WAS_APPLIED="$PATCH_WAS_APPLIED"
 
 echo "==> Updating wasm-bindgen's tokio export bridge for HostedRuntime"
 apply "$WORK/wasm-bindgen" "$REPO/patches/wasm-bindgen-tokio-hosted-runtime.patch"
 
 echo "==> Enabling quanta's POSIX monotonic clock on Emscripten"
 apply "$WORK/quanta" "$REPO/patches/quanta-emscripten-clock.patch"
-
-echo "==> Selecting quinn-udp's basic socket fallback on Emscripten"
-apply "$WORK/quinn" "$REPO/patches/quinn-udp-emscripten-fallback.patch"
 
 echo "==> Adapting tokio-quiche dependencies for Emscripten"
 apply "$WORK/quiche-tokio" "$REPO/patches/tokio-quiche-emscripten.patch"
@@ -100,6 +99,9 @@ BINARYEN_ROOT='$EM_PREFIX/libexec/binaryen'
 NODE_JS='$(command -v node)'
 EOF
 echo "  wrote $CF/.emscripten_cf"
+if [ "$EMSCRIPTEN_PATCH_WAS_APPLIED" = 1 ]; then
+  EM_CONFIG="$CF/.emscripten_cf" "$CF/emcc" --clear-cache
+fi
 
 echo "==> Building the patched wasm-bindgen CLI (host)"
 ( cd "$WORK/wasm-bindgen" && cargo build --release -p wasm-bindgen-cli )

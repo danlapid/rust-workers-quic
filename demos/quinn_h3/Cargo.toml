@@ -23,7 +23,7 @@ tokio = { version = "1", default-features = false, features = [
 ] }
 
 # QUIC. `rustls-ring` selects the ring crypto backend (aws-lc-rs is intractable
-# on emscripten). The patched quinn-udp uses its basic socket fallback.
+# on emscripten). Emscripten implements the recvmmsg used by quinn-udp.
 quinn = { version = "0.11", default-features = false, features = [
     "rustls-ring",
     "runtime-tokio",

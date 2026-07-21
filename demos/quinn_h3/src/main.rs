@@ -1,6 +1,6 @@
-//! HTTP/3 over quinn from `wasm32-unknown-emscripten` running on Node.js.
+//! HTTP/3 over quinn from `wasm32-unknown-emscripten` running under Node.js.
 //!
-//! quinn-udp uses its basic socket fallback on Emscripten, backed by node:dgram.
+//! quinn-udp uses its normal Unix socket path over Emscripten's Node backend.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
