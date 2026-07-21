@@ -20,12 +20,10 @@ tokio = { version = "1", default-features = false, features = [
     "rt",
     "macros",
     "net",
-    "io-util",
 ] }
 
-# QUIC. We bypass quinn-udp by passing our own AsyncUdpSocket + TokioRuntime, so
-# only the proto + rustls glue matters. `rustls-ring` selects the ring crypto
-# backend (aws-lc-rs is intractable on emscripten).
+# QUIC. `rustls-ring` selects the ring crypto backend (aws-lc-rs is intractable
+# on emscripten). The patched quinn-udp uses its basic socket fallback.
 quinn = { version = "0.11", default-features = false, features = [
     "rustls-ring",
     "runtime-tokio",

@@ -1,19 +1,13 @@
 //! HTTP/3 over quinn from `wasm32-unknown-emscripten` running on Node.js.
 //!
-//! Quinn uses this small adapter instead of quinn-udp, putting its datagrams on
-//! the Emscripten Tokio `UdpSocket` backed by node:dgram.
+//! quinn-udp uses its basic socket fallback on Emscripten, backed by node:dgram.
 
-use std::io::{self, IoSliceMut};
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, SignatureScheme};
-use tokio::io::ReadBuf;
-use tokio::net::UdpSocket;
 use wasm_bindgen::prelude::*;
 
 fn main() {}
@@ -26,63 +20,6 @@ extern "C" {
 
 fn log(s: &str) {
     console_log(s);
-}
-
-#[derive(Debug)]
-struct EmscriptenUdp {
-    socket: UdpSocket,
-}
-
-impl quinn::AsyncUdpSocket for EmscriptenUdp {
-    fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn quinn::UdpPoller>> {
-        Box::pin(EmscriptenPoller(self))
-    }
-
-    fn try_send(&self, transmit: &quinn::udp::Transmit) -> io::Result<()> {
-        self.socket
-            .try_send_to(transmit.contents, transmit.destination)
-            .map(|_| ())
-    }
-
-    fn poll_recv(
-        &self,
-        cx: &mut Context<'_>,
-        bufs: &mut [IoSliceMut<'_>],
-        meta: &mut [quinn::udp::RecvMeta],
-    ) -> Poll<io::Result<usize>> {
-        if bufs.is_empty() {
-            return Poll::Ready(Ok(0));
-        }
-
-        let mut buf = ReadBuf::new(&mut bufs[0]);
-        let addr = std::task::ready!(self.socket.poll_recv_from(cx, &mut buf))?;
-        let len = buf.filled().len();
-        meta[0] = quinn::udp::RecvMeta {
-            addr,
-            len,
-            stride: len,
-            ecn: None,
-            dst_ip: None,
-        };
-        Poll::Ready(Ok(1))
-    }
-
-    fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.socket.local_addr()
-    }
-
-    fn may_fragment(&self) -> bool {
-        false
-    }
-}
-
-#[derive(Debug)]
-struct EmscriptenPoller(Arc<EmscriptenUdp>);
-
-impl quinn::UdpPoller for EmscriptenPoller {
-    fn poll_writable(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.0.socket.poll_send_ready(cx)
-    }
 }
 
 // The PoC must also work behind TLS-inspecting proxies. Accept the chain path,
@@ -166,15 +103,7 @@ async fn run() -> anyhow::Result<String> {
     } else {
         "[::]:0"
     };
-    let socket: Arc<dyn quinn::AsyncUdpSocket> = Arc::new(EmscriptenUdp {
-        socket: UdpSocket::bind(bind_addr).await?,
-    });
-    let mut endpoint = quinn::Endpoint::new_with_abstract_socket(
-        quinn::EndpointConfig::default(),
-        None,
-        socket,
-        Arc::new(quinn::TokioRuntime),
-    )?;
+    let mut endpoint = quinn::Endpoint::client(bind_addr.parse()?)?;
     endpoint.set_default_client_config(client_config()?);
 
     log(&format!("dialing QUIC {host} at {peer} (ALPN h3)..."));

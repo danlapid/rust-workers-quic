@@ -24,7 +24,7 @@ needs `node:dgram` in the Workers runtime (a separate effort). Nothing here depe
 
 ```
   h3 (HTTP/3)  ──►  quinn (QUIC / TLS 1.3 via rustls + ring)
-     │   custom AsyncUdpSocket / UdpPoller adapter (demos/quinn_h3/src/main.rs)
+     │   quinn-udp basic socket fallback
      ▼
   tokio::net::UdpSocket        ← standard Tokio API over Guy's mio backend
      │   mio over the epoll reactor
@@ -42,9 +42,9 @@ loop. That attribute lives in the patched wasm-bindgen fork.
 
 | Path | What |
 | --- | --- |
-| `demos/quinn_h3/` (`src/main.rs`, `Cargo.toml`, `.cargo/`, `run_quic.mjs`) | **The quinn demo.** quinn + the custom `AsyncUdpSocket` over the emscripten `tokio::net::UdpSocket`. |
+| `demos/quinn_h3/` (`src/main.rs`, `Cargo.toml`, `.cargo/`, `run_quic.mjs`) | **The quinn demo.** quinn's normal Tokio integration over quinn-udp's basic Emscripten socket fallback. |
 | `demos/quiche/` | **The quiche demo.** `tokio-quiche` + BoringSSL over the Emscripten `tokio::net::UdpSocket`. |
-| `patches/` | Reproducible Emscripten compatibility patches for wasm-bindgen, quanta, and tokio-quiche dependencies. |
+| `patches/` | Reproducible Emscripten compatibility patches for wasm-bindgen, quanta, quinn-udp, and tokio-quiche dependencies. |
 | `cmake/boringssl-emscripten.cmake` | Lets Cargo's normal `boring-sys` build select portable BoringSSL C code and the Emscripten toolchain. |
 | `scripts/` | `setup.sh` (clone dependencies + apply patches + toolchain), `run-quinn_h3.sh` (quinn demo), `run-quiche.sh` (quiche demo). No user-supplied configuration is required. |
 | `.github/workflows/ci.yml` | CI (macOS): provisions the toolchain via `setup.sh` and runs **both** demos, asserting the success sentinels. |
@@ -52,10 +52,10 @@ loop. That attribute lives in the patched wasm-bindgen fork.
 
 ## How code flows here (important)
 
-`setup.sh` clones pinned emscripten, wasm-bindgen, Tokio, libc, ring, quanta, and quiche
+`setup.sh` clones pinned emscripten, wasm-bindgen, Tokio, libc, ring, quanta, Quinn, and quiche
 revisions into git-ignored `.work/` directories. Cargo fetches pinned mio and socket2;
 `tokio-quiche`, `boring`, and `boring-sys` come from crates.io. See `patches/README.md`
-for the three local dependency changes.
+for the local dependency changes.
 
 If you modify a patched `.work` checkout, regenerate its patch so the change survives a
 fresh setup. Keep unpatched checkouts unmodified; update their pins instead. Do not
@@ -69,7 +69,7 @@ bash scripts/run-quinn_h3.sh                 # quinn demo: build + run under Nod
 bash scripts/run-quiche.sh                   # quiche demo: build + run under Node
 ```
 
-`setup.sh` clones the five pinned Guy Bedford forks plus quanta and quiche, then builds the
+`setup.sh` clones the five pinned Guy Bedford forks plus quanta, Quinn, and quiche, then builds the
 wasm-bindgen CLI. Cargo fetches mio and socket2; quiche's published `boring` dependency causes
 `boring-sys` to compile its bundled BoringSSL for wasm.
 `.github/workflows/ci.yml` runs this whole flow + both demos on
@@ -96,9 +96,10 @@ former custom `udp_emscripten.rs` and libc patches.
 
 ### QUIC library choice
 **quinn** (`demos/quinn_h3/src/main.rs`) — the de-facto pure-Rust QUIC impl, tokio-native, uses **rustls**.
-We bypass `quinn-udp`'s platform GSO/GRO code by passing a custom `AsyncUdpSocket` to
-`Endpoint::new_with_abstract_socket`. TLS is **rustls + ring** (ring builds via its no-asm
-fallback + a getrandom `SystemRandom`). It was the fastest first result: no C crypto library.
+It uses the normal `Endpoint::client` and Tokio runtime. Emscripten lacks the `recvmmsg`
+syscall selected by quinn-udp's generic Unix backend, so the local patch selects
+quinn-udp's existing basic `send_to`/`recv_from_vectored` fallback. TLS is **rustls + ring**
+(ring builds via its no-asm fallback + a getrandom `SystemRandom`).
 
 **quiche** (`demos/quiche/`) — Cloudflare's own QUIC/H3, TLS via **BoringSSL** (the `boring`
 crate). Initially assumed intractable, but BoringSSL *does* build to wasm (`OPENSSL_NO_ASM`)
@@ -117,8 +118,9 @@ intractable on Emscripten.
   wasm-bindgen ESM output (it's a browser-only/experimental flag).
 - **Don't name a wasm-bindgen export `run`** — it collides with emscripten's internal
   runtime `run()` (`AssertionError: runtimeElements contains library symbol: $run`).
-- **Stock `quinn-udp` builds unmodified** because Guy's current libc includes
-  `in6_pktinfo`. We still pass quinn an abstract socket, so quinn-udp is unused at runtime.
+- **quinn-udp must use its basic fallback on Emscripten.** Emscripten is `cfg(unix)` but
+  its libc explicitly leaves `recvmmsg` unimplemented; quinn-udp's generic Unix receive
+  path therefore cannot work. The fallback is single-datagram and has no ECN/GSO/GRO.
 - **emcc link flags go through `rustc -Clink-arg=…`**, not `EMCC_CFLAGS` — the latter also
   applies to C compiles (e.g. ring), where a link-only flag is `-Wunused-command-line-argument`
   and `-Werror` makes it fatal.
@@ -152,8 +154,8 @@ See `docs/branch-map.md` for every nonstandard dependency source and pin.
 - ✅ BoringSSL compiled to wasm; `tokio-quiche` GET on Node — 200 OK (second demo).
 - ✅ Cargo builds quiche's published `boring` dependency and bundled BoringSSL for wasm.
 - ✅ Tokio UDP and libc `in6_pktinfo` are present in the pinned Guy Bedford branches.
-- ⬜ Upstream the remaining BoringSSL Emscripten build configuration. Also report the latent `quinn-udp`
-  `fallback.rs` `send()` return-type bug upstream; it is unrelated to Emscripten.
+- ⬜ Upstream the remaining BoringSSL Emscripten build configuration and the quinn-udp
+  Emscripten fallback patch.
 - ⬜ Same crate on Cloudflare Workers, once the runtime exposes `node:dgram`.
 - ⬜ Single-datagram UDP only (no GSO/GRO) — a perf follow-up.
 

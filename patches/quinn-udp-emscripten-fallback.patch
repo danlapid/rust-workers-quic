@@ -1,0 +1,26 @@
+diff --git a/quinn-udp/src/lib.rs b/quinn-udp/src/lib.rs
+index 0f69070..ff423df 100644
+--- a/quinn-udp/src/lib.rs
++++ b/quinn-udp/src/lib.rs
+@@ -38,10 +38,10 @@ use std::{
+     time::{Duration, Instant},
+ };
+ 
+-#[cfg(any(unix, windows))]
++#[cfg(any(all(unix, not(target_os = "emscripten")), windows))]
+ mod cmsg;
+ 
+-#[cfg(unix)]
++#[cfg(all(unix, not(target_os = "emscripten")))]
+ #[path = "unix.rs"]
+ mod imp;
+ 
+@@ -50,7 +50,7 @@ mod imp;
+ mod imp;
+ 
+ // No ECN support
+-#[cfg(not(any(wasm_browser, unix, windows)))]
++#[cfg(any(target_os = "emscripten", not(any(wasm_browser, unix, windows))))]
+ #[path = "fallback.rs"]
+ mod imp;
+ 
