@@ -134,12 +134,10 @@ intractable on Emscripten.
 ### Certificate verification behind a TLS-inspecting proxy
 If you run behind a TLS-inspecting VPN/proxy with a private CA, **strict** cert verification
 fails (`UnknownIssuer`, or `UnsupportedSignatureAlgorithm` if the private CA uses a key ring
-doesn't implement, e.g. ECDSA P-521). **The QUIC transport is unaffected.** `demos/quinn_h3/src/main.rs`
-has a `STRICT_VERIFY` constant:
-- `true` — full `webpki` verification against the Mozilla roots (use on a clean network path).
-- `false` (default) — a verifier that still ring-checks the server leaf's handshake
-  signature but accepts the chain path, so the transport is demonstrable through an
-  inspecting proxy. **Not for production.**
+doesn't implement, e.g. ECDSA P-521). **The QUIC transport is unaffected.** The quinn demo
+uses a verifier that still ring-checks the server's handshake signature but accepts the
+chain path, so the transport remains demonstrable through an inspecting proxy. **Not for
+production.**
 
 ## Dependency pins
 

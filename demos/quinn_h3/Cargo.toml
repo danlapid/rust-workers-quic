@@ -10,7 +10,7 @@ name = "quic-demo"
 path = "src/main.rs"
 
 [dependencies]
-# wasm-bindgen comes from Guy's fork with the repository's single source patch.
+# wasm-bindgen comes from Guy's patched fork.
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 js-sys.workspace = true
@@ -19,8 +19,6 @@ js-sys.workspace = true
 tokio = { version = "1", default-features = false, features = [
     "rt",
     "macros",
-    "sync",
-    "time",
     "net",
     "io-util",
 ] }
@@ -31,15 +29,11 @@ tokio = { version = "1", default-features = false, features = [
 quinn = { version = "0.11", default-features = false, features = [
     "rustls-ring",
     "runtime-tokio",
-    "log",
 ] }
 rustls = { version = "0.23", default-features = false, features = [
     "ring",
     "std",
-    "tls12",
-    "logging",
 ] }
-webpki-roots = "1"
 
 # HTTP/3 on top of quinn (h3-quinn 0.0.10 targets quinn 0.11.7+).
 h3 = "0.0.8"

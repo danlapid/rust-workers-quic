@@ -110,7 +110,6 @@ Expected tail:
 ```
 QUIC handshake OK: alpn=h3; rtt=40ms
 sending HTTP/3 GET https://cloudflare-quic.com/ ...
-HTTP/3 response: status=200 OK server="cloudflare"
 HTTP/3 GET OK: cloudflare-quic.com (...) alpn=h3 status=200 OK body=125959B first_line="<!DOCTYPE html>"
 QUIC-H3-ON-EMSCRIPTEN-OK
 ```
@@ -136,13 +135,9 @@ Zero-Trust), strict certificate verification will fail (`UnknownIssuer`, or an
 `UnsupportedSignatureAlgorithm` if the private CA uses a key `ring` doesn't implement,
 such as ECDSA P-521). The QUIC transport is unaffected.
 
-`demos/quinn_h3/src/main.rs` has a `STRICT_VERIFY` constant:
-
-- `STRICT_VERIFY = true` — full `webpki` verification against the Mozilla roots (use with
-  no interception in the path).
-- `STRICT_VERIFY = false` (default) — a verifier that still checks the server leaf's
-  handshake signature via `ring` but accepts the chain path, so the transport is
-  demonstrable through an inspecting proxy.
+The quinn transport PoC uses a verifier that checks the server's handshake signature via
+`ring` but accepts the certificate chain path, so it remains demonstrable through an
+inspecting proxy. This is intentionally not production certificate verification.
 
 ## Status & next steps
 
