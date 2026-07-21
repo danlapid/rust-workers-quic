@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# One-time setup: clone the pinned forks, apply this repo's patch, configure the
+# One-time setup: clone the pinned dependencies, apply this repo's patches, configure the
 # emscripten `cf` toolchain, and build the patched wasm-bindgen CLI.
 #
 # No configuration needed — just:  bash scripts/setup.sh
-# Idempotent: safe to re-run; existing clones are repinned and the patch is detected.
+# Idempotent: safe to re-run; existing clones are repinned and patches are detected.
 # Requires: git, rustup, python3, node, and Homebrew's `emscripten` package.
 # The quiche demo additionally needs Homebrew `llvm` and `cmake`.
 set -euo pipefail
@@ -23,6 +23,10 @@ WASM_BINDGEN_BRANCH="emscripten-non-identifier-names"
 WASM_BINDGEN_COMMIT="4b69f3b3ba4212c857be6854f77fa5aec8b62871"
 RING_BRANCH="emscripten"
 RING_COMMIT="6671f7cfbb13f249b571ffa6326275a8596e0ca2"
+QUANTA_BRANCH="v0.12.6"
+QUANTA_COMMIT="0f81349c223854136113e634cf8dd6cd85569880"
+QUICHE_TOKIO_BRANCH="0.29.3"
+QUICHE_TOKIO_COMMIT="55886df3be579579207104c8e645825b6347a209"
 GB="https://github.com/guybedford"
 
 clone() { # url ref dir
@@ -54,14 +58,24 @@ clone "$GB/wasm-bindgen" "$WASM_BINDGEN_BRANCH" "$WORK/wasm-bindgen"
 clone "$GB/tokio" "$TOKIO_BRANCH" "$WORK/tokio"
 clone "$GB/libc" "$LIBC_BRANCH" "$WORK/libc"
 clone "$GB/ring" "$RING_BRANCH" "$WORK/ring"
+clone "https://github.com/metrics-rs/quanta" "$QUANTA_BRANCH" "$WORK/quanta"
+clone "https://github.com/cloudflare/quiche" "$QUICHE_TOKIO_BRANCH" "$WORK/quiche-tokio"
 pin "$WORK/emscripten" "$EMSCRIPTEN_BRANCH" "$EMSCRIPTEN_COMMIT"
 pin "$WORK/wasm-bindgen" "$WASM_BINDGEN_BRANCH" "$WASM_BINDGEN_COMMIT"
 pin "$WORK/tokio" "$TOKIO_BRANCH" "$TOKIO_COMMIT"
 pin "$WORK/libc" "$LIBC_BRANCH" "$LIBC_COMMIT"
 pin "$WORK/ring" "$RING_BRANCH" "$RING_COMMIT"
+pin "$WORK/quanta" "$QUANTA_BRANCH" "$QUANTA_COMMIT"
+pin "$WORK/quiche-tokio" "$QUICHE_TOKIO_BRANCH" "$QUICHE_TOKIO_COMMIT"
 
 echo "==> Updating wasm-bindgen's tokio export bridge for HostedRuntime"
 apply "$WORK/wasm-bindgen" "$REPO/patches/wasm-bindgen-tokio-hosted-runtime.patch"
+
+echo "==> Enabling quanta's POSIX monotonic clock on Emscripten"
+apply "$WORK/quanta" "$REPO/patches/quanta-emscripten-clock.patch"
+
+echo "==> Adapting tokio-quiche dependencies for Emscripten"
+apply "$WORK/quiche-tokio" "$REPO/patches/tokio-quiche-emscripten.patch"
 
 echo "==> Configuring emscripten cf toolchain"
 CF="$WORK/emscripten"

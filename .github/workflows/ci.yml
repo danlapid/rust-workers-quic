@@ -64,7 +64,7 @@ jobs:
             ~/.cargo/git
           key: rwq-cargo-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'demos/**/Cargo.toml') }}
 
-      - name: Setup (clone pinned forks, apply patch, build wasm-bindgen CLI)
+      - name: Setup (clone pinned dependencies, apply patches, build wasm-bindgen CLI)
         run: bash scripts/setup.sh
 
       - name: quinn demo — HTTP/3 GET to cloudflare-quic.com

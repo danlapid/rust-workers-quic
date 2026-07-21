@@ -1,0 +1,82 @@
+diff --git a/datagram-socket/src/datagram.rs b/datagram-socket/src/datagram.rs
+index 1b90619..831252b 100644
+--- a/datagram-socket/src/datagram.rs
++++ b/datagram-socket/src/datagram.rs
+@@ -49,7 +49,7 @@ use std::os::fd::FromRawFd;
+ use std::os::fd::IntoRawFd;
+ #[cfg(unix)]
+ use std::os::fd::OwnedFd;
+-#[cfg(unix)]
++#[cfg(all(unix, not(target_os = "emscripten")))]
+ use tokio::net::UnixDatagram;
+ 
+ use crate::socket_stats::AsSocketStats;
+@@ -667,7 +667,7 @@ impl DatagramSocketRecv for Arc<UdpSocket> {
+     }
+ }
+ 
+-#[cfg(unix)]
++#[cfg(all(unix, not(target_os = "emscripten")))]
+ impl DatagramSocket for UnixDatagram {
+     fn as_raw_io(&self) -> Option<BorrowedFd<'_>> {
+         Some(self.as_fd())
+@@ -678,7 +678,7 @@ impl DatagramSocket for UnixDatagram {
+     }
+ }
+ 
+-#[cfg(unix)]
++#[cfg(all(unix, not(target_os = "emscripten")))]
+ impl DatagramSocketSend for UnixDatagram {
+     #[inline]
+     fn poll_send(&self, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
+@@ -704,7 +704,7 @@ impl DatagramSocketSend for UnixDatagram {
+     }
+ }
+ 
+-#[cfg(unix)]
++#[cfg(all(unix, not(target_os = "emscripten")))]
+ impl DatagramSocketRecv for UnixDatagram {
+     #[inline]
+     fn poll_recv(
+@@ -722,7 +722,7 @@ impl DatagramSocketRecv for UnixDatagram {
+     }
+ }
+ 
+-#[cfg(unix)]
++#[cfg(all(unix, not(target_os = "emscripten")))]
+ impl DatagramSocketRecv for Arc<UnixDatagram> {
+     #[inline]
+     fn poll_recv(
+diff --git a/datagram-socket/src/shutdown.rs b/datagram-socket/src/shutdown.rs
+index 363f908..7270dd2 100644
+--- a/datagram-socket/src/shutdown.rs
++++ b/datagram-socket/src/shutdown.rs
+@@ -33,7 +33,7 @@ use std::task::Poll;
+ 
+ use tokio::net::UdpSocket;
+ 
+-#[cfg(unix)]
++#[cfg(all(unix, not(target_os = "emscripten")))]
+ use tokio::net::UnixDatagram;
+ 
+ pub trait ShutdownConnection {
+@@ -78,7 +78,7 @@ impl ShutdownConnection for UdpSocket {
+     }
+ }
+ 
+-#[cfg(unix)]
++#[cfg(all(unix, not(target_os = "emscripten")))]
+ impl ShutdownConnection for UnixDatagram {
+     #[inline]
+     fn poll_shutdown(&mut self, _cx: &mut Context) -> Poll<io::Result<()>> {
+diff --git a/quiche/Cargo.toml b/quiche/Cargo.toml
+index 70f423d..ea80f69 100644
+--- a/quiche/Cargo.toml
++++ b/quiche/Cargo.toml
+@@ -98,5 +98,5 @@ ring = { workspace = true }
+ rstest = { workspace = true }
+ url = { workspace = true }
+ 
+ [lib]
+-crate-type = ["lib", "staticlib", "cdylib"]
++crate-type = ["lib"]

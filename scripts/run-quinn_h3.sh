@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the quinn demo (demos/quinn_h3) for wasm32-unknown-emscripten and run it
 # under Node. The root Cargo workspace references the pinned forks provisioned
-# under .work by setup.sh; only wasm-bindgen has a local source patch.
+# under .work by setup.sh; dependency changes are reproducible under patches/.
 #
 # Run scripts/setup.sh once first. No configuration needed — just:  bash scripts/run-quinn_h3.sh
 set -euo pipefail

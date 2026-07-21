@@ -43,34 +43,34 @@ loop. That attribute lives in the patched wasm-bindgen fork.
 | Path | What |
 | --- | --- |
 | `demos/quinn_h3/` (`src/main.rs`, `Cargo.toml`, `.cargo/`, `run_quic.mjs`) | **The quinn demo.** quinn + the custom `AsyncUdpSocket` over the emscripten `tokio::net::UdpSocket`. |
-| `demos/quiche/` | **The quiche demo.** quiche + `quiche::h3` (BoringSSL) driving its sans-I/O loop over the same emscripten `tokio::net::UdpSocket`. |
-| `patches/` | The sole local dependency source patch: the wasm-bindgen `HostedRuntime` export bridge. |
+| `demos/quiche/` | **The quiche demo.** `tokio-quiche` + BoringSSL over the Emscripten `tokio::net::UdpSocket`. |
+| `patches/` | Reproducible Emscripten compatibility patches for wasm-bindgen, quanta, and tokio-quiche dependencies. |
 | `cmake/boringssl-emscripten.cmake` | Lets Cargo's normal `boring-sys` build select portable BoringSSL C code and the Emscripten toolchain. |
-| `scripts/` | `setup.sh` (clone forks + apply patch + toolchain), `run-quinn_h3.sh` (quinn demo), `run-quiche.sh` (quiche demo). No user-supplied configuration is required. |
+| `scripts/` | `setup.sh` (clone dependencies + apply patches + toolchain), `run-quinn_h3.sh` (quinn demo), `run-quiche.sh` (quiche demo). No user-supplied configuration is required. |
 | `.github/workflows/ci.yml` | CI (macOS): provisions the toolchain via `setup.sh` and runs **both** demos, asserting the success sentinels. |
 | `docs/branch-map.md` | Exact revisions and provisioning methods for nonstandard dependencies. |
 
 ## How code flows here (important)
 
-`setup.sh` clones pinned emscripten, wasm-bindgen, Tokio, libc, and ring revisions into
-git-ignored `.work/` directories. Cargo fetches pinned mio, socket2, and quiche revisions;
-`boring` and `boring-sys` come from crates.io. The only local dependency source change is
-`patches/wasm-bindgen-tokio-hosted-runtime.patch`.
+`setup.sh` clones pinned emscripten, wasm-bindgen, Tokio, libc, ring, quanta, and quiche
+revisions into git-ignored `.work/` directories. Cargo fetches pinned mio and socket2;
+`tokio-quiche`, `boring`, and `boring-sys` come from crates.io. See `patches/README.md`
+for the three local dependency changes.
 
-If you modify `.work/wasm-bindgen`, regenerate that patch so the change survives a fresh
-setup. Keep the other `.work` checkouts unmodified; update their pins instead. Do not
+If you modify a patched `.work` checkout, regenerate its patch so the change survives a
+fresh setup. Keep unpatched checkouts unmodified; update their pins instead. Do not
 reintroduce local Tokio/libc UDP patches unless upstream support demonstrably regresses.
 
 ## Build & run
 
 ```sh
-bash scripts/setup.sh                        # one-time: clone forks, apply patch, toolchain
+bash scripts/setup.sh                        # one-time: clone, patch, configure toolchain
 bash scripts/run-quinn_h3.sh                 # quinn demo: build + run under Node
 bash scripts/run-quiche.sh                   # quiche demo: build + run under Node
 ```
 
-`setup.sh` clones the five pinned Guy Bedford forks and builds the wasm-bindgen CLI. Cargo
-fetches mio, socket2, and quiche; quiche's published `boring` dependency causes
+`setup.sh` clones the five pinned Guy Bedford forks plus quanta and quiche, then builds the
+wasm-bindgen CLI. Cargo fetches mio and socket2; quiche's published `boring` dependency causes
 `boring-sys` to compile its bundled BoringSSL for wasm.
 `.github/workflows/ci.yml` runs this whole flow + both demos on
 macOS.
@@ -102,12 +102,13 @@ fallback + a getrandom `SystemRandom`). It was the fastest first result: no C cr
 
 **quiche** (`demos/quiche/`) — Cloudflare's own QUIC/H3, TLS via **BoringSSL** (the `boring`
 crate). Initially assumed intractable, but BoringSSL *does* build to wasm (`OPENSSL_NO_ASM`)
-and run on Node. quiche is sans-I/O, so there's no platform UDP code to port — we drive its
-`send()`/`recv()` loop over the same emscripten `tokio::net::UdpSocket`. The build needs
+and run on Node. `tokio-quiche` drives quiche's sans-I/O state machines over the same
+Emscripten `tokio::net::UdpSocket`. The build needs
 `-fvisibility=default` so bindgen sees BoringSSL functions. quiche's former wasm-trapping
 `-> c_void` declarations were corrected upstream in PR #2535, and the demo pins a commit
-containing that fix. No quiche or boring source patch is needed. **s2n-quic** (aws-lc-rs)
-remains intractable on emscripten.
+containing that fix. The local quiche manifest patch suppresses unused C ABI crate types;
+there is no quiche protocol or boring source patch. **s2n-quic** (aws-lc-rs) remains
+intractable on Emscripten.
 
 ### Build gotchas (encoded in `.cargo/config.toml` + `scripts/`, but know why)
 - The **patched wasm-bindgen CLI must be on `PATH`** for `-sWASM_BINDGEN=auto` (built from
@@ -150,7 +151,7 @@ See `docs/branch-map.md` for every nonstandard dependency source and pin.
 - ✅ standard `tokio::net::UdpSocket` over Guy's Emscripten mio backend.
 - ✅ quinn QUIC handshake to `cloudflare-quic.com` over the internet, on Node.
 - ✅ HTTP/3 GET over that connection (`h3` + `h3-quinn`) — 200 OK, real HTML body.
-- ✅ BoringSSL compiled to wasm; quiche + `quiche::h3` GET on Node — 200 OK (second demo).
+- ✅ BoringSSL compiled to wasm; `tokio-quiche` GET on Node — 200 OK (second demo).
 - ✅ Cargo builds quiche's published `boring` dependency and bundled BoringSSL for wasm.
 - ✅ Tokio UDP and libc `in6_pktinfo` are present in the pinned Guy Bedford branches.
 - ⬜ Upstream the remaining BoringSSL Emscripten build configuration. Also report the latent `quinn-udp`
@@ -162,8 +163,8 @@ See `docs/branch-map.md` for every nonstandard dependency source and pin.
 
 - **Never commit** `.work/`, `target/`, `*.pem`, or generated
   `*.js`/`*.wasm` (all git-ignored).
-- Changes to `.work/wasm-bindgen` must be reflected in
-  `patches/wasm-bindgen-tokio-hosted-runtime.patch`; do not patch other dependency clones.
+- Changes to patched dependency checkouts must be reflected in the corresponding file under
+  `patches/`; do not make unreproducible edits under `.work`.
 - **Keep everything public-safe**: no secrets, no private CA material, no internal
   infrastructure names, no non-public URLs, no account IDs.
 

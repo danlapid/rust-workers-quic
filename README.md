@@ -64,26 +64,27 @@ The second demo (`demos/quiche/`) uses **quiche**, Cloudflare's own QUIC/HTTP-3 
 which does TLS via **BoringSSL** (through the `boring` crate). BoringSSL was initially
 assumed intractable on emscripten, but Cargo can compile it to wasm (`OPENSSL_NO_ASM`) and
 run it on Node. The target configuration and upstream wasm FFI fix are documented in
-[`docs/quiche-boringssl.md`](docs/quiche-boringssl.md). quiche is *sans-I/O*, so
-there's no platform UDP code to port: the demo drives `quiche`'s `send()`/`recv()` loop
-directly over the same emscripten `tokio::net::UdpSocket`. (`s2n-quic` pulls aws-lc-rs,
-which remains intractable on emscripten.)
+[`docs/quiche-boringssl.md`](docs/quiche-boringssl.md). The demo uses Cloudflare's
+`tokio-quiche` adapter to drive quiche's sans-I/O state machines over the same Emscripten
+`tokio::net::UdpSocket`. (`s2n-quic` pulls aws-lc-rs, which remains intractable on
+Emscripten.)
 
 ## What's in here
 
 | Path | What |
 | --- | --- |
 | `demos/quinn_h3/` | **The quinn demo.** `h3` + `quinn` + a custom `AsyncUdpSocket` over the emscripten `tokio::net::UdpSocket`, doing an HTTP/3 GET to `cloudflare-quic.com`. |
-| `demos/quiche/` | **The quiche demo.** `quiche` + `quiche::h3` (BoringSSL) driving its sans-I/O loop over the same emscripten `tokio::net::UdpSocket`. |
-| `patches/` | The sole local dependency source patch: the wasm-bindgen `HostedRuntime` export bridge. |
+| `demos/quiche/` | **The quiche demo.** `tokio-quiche` + BoringSSL over the Emscripten `tokio::net::UdpSocket`. |
+| `patches/` | Reproducible Emscripten compatibility patches for wasm-bindgen, quanta, and tokio-quiche dependencies. |
 | `cmake/boringssl-emscripten.cmake` | Selects BoringSSL's portable C implementation and loads the Emscripten CMake toolchain for Cargo's `boring-sys` build. |
-| `scripts/` | `setup.sh` (clone forks + apply patch + toolchain), `run-quinn_h3.sh` (quinn demo), `run-quiche.sh` (quiche demo). No user-supplied configuration is required. |
+| `scripts/` | `setup.sh` (clone dependencies + apply patches + toolchain), `run-quinn_h3.sh` (quinn demo), `run-quiche.sh` (quiche demo). No user-supplied configuration is required. |
 | `.github/workflows/ci.yml` | CI that provisions the toolchain and runs **both** demos on macOS, asserting the success sentinels. |
 | `docs/branch-map.md` | Exact revisions and provisioning methods for nonstandard dependencies. |
 | `AGENTS.md` | Orientation + hard-won build knowledge for contributors and coding agents. |
 
-> Run `scripts/setup.sh` before building. It provisions five pinned fork checkouts under
-> `.work`; Cargo fetches pinned mio, socket2, and quiche sources plus registry dependencies.
+> Run `scripts/setup.sh` before building. It provisions five pinned Guy Bedford forks plus
+> pinned quanta and quiche checkouts under `.work`; Cargo fetches mio, socket2, and
+> registry dependencies.
 > The run scripts set the target environment and execute the generated modules under Node.
 
 ## Quickstart
@@ -95,8 +96,8 @@ BoringSSL), a C toolchain, and a system **emscripten** for its LLVM/binaryen bac
 auto-detects the Homebrew emscripten backend; the `cf` fork frontend is cloned for you).
 
 ```sh
-# 1. One-time setup: clones Guy's forks at the pinned branches, applies the
-#    patch, builds the patched wasm-bindgen CLI, and configures emcc.
+# 1. One-time setup: clones pinned dependencies, applies the compatibility
+#    patches, builds the patched wasm-bindgen CLI, and configures emcc.
 #    Everything lands under ./.work (git-ignored).
 ./scripts/setup.sh
 
@@ -123,9 +124,8 @@ To build BoringSSL through Cargo and run the **quiche** demo instead:
 Expected tail:
 
 ```
-QUIC handshake OK: alpn="h3"; rtt=30ms
-H3 headers on stream 0: status=200 server="cloudflare"
-HTTP/3 GET OK (quiche): cloudflare-quic.com (...) status=200 body=125959B first_line="<!DOCTYPE html>"
+QUIC handshake and HTTP/3 connection established
+HTTP/3 GET OK (tokio-quiche): cloudflare-quic.com (...) status=200 server="cloudflare" body=125959B first_line="<!DOCTYPE html>"
 QUIC-H3-QUICHE-ON-EMSCRIPTEN-OK
 ```
 
@@ -150,7 +150,7 @@ such as ECDSA P-521). The QUIC transport is unaffected.
 - ✅ standard `tokio::net::UdpSocket` over Guy's Emscripten mio backend.
 - ✅ `quinn` QUIC handshake to `cloudflare-quic.com` over the internet, on Node.
 - ✅ HTTP/3 GET over that connection (`h3` + `h3-quinn`) — 200 OK, real HTML body.
-- ✅ **BoringSSL compiled to wasm; `quiche` + `quiche::h3` GET on Node** — 200 OK, same
+- ✅ **BoringSSL compiled to wasm; `tokio-quiche` GET on Node** — 200 OK, same
   body (second demo).
 - ✅ **CI** (`.github/workflows/ci.yml`) provisions the toolchain and runs both demos on macOS.
 - ✅ Tokio UDP and libc `in6_pktinfo` are supplied by the pinned Guy Bedford branches.
