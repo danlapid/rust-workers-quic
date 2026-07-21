@@ -1,20 +1,28 @@
 #!/usr/bin/env bash
-# One-time setup: clone the pinned forks, apply this repo's patches, configure the
-# emscripten `cf` toolchain, build the patched wasm-bindgen CLI, and compile
-# BoringSSL to wasm (for the quiche demo).
+# One-time setup: clone the pinned forks, apply this repo's patch, configure the
+# emscripten `cf` toolchain, and build the patched wasm-bindgen CLI.
 #
 # No configuration needed — just:  bash scripts/setup.sh
-# Idempotent-ish: safe to re-run; it skips clones that already exist.
-# Requires: git, rustup, python3, node, and Homebrew with `brew install emscripten llvm cmake`.
+# Idempotent: safe to re-run; existing clones are repinned and the patch is detected.
+# Requires: git, rustup, python3, node, and Homebrew's `emscripten` package.
+# The quiche demo additionally needs Homebrew `llvm` and `cmake`.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 WORK="$REPO/.work"   # git-ignored: forks + toolchain clone here
 mkdir -p "$WORK"
 
-# Pinned refs — see docs/branch-map.md.
-EMSCRIPTEN_REF="cf"
-WORKERS_RS_REF="emscripten"
+# Pinned branch heads — see docs/branch-map.md.
+EMSCRIPTEN_BRANCH="cf"
+EMSCRIPTEN_COMMIT="08a1fc28569c93a86f9e737bac508332a298615e"
+TOKIO_BRANCH="emscripten-layering"
+TOKIO_COMMIT="7c1d4977c510866775ed6164b58b2218a6a2955b"
+LIBC_BRANCH="libc-0.2-emscripten"
+LIBC_COMMIT="29d4451facf22c9dcc25e3e3f3bc2ba827b278f8"
+WASM_BINDGEN_BRANCH="emscripten-non-identifier-names"
+WASM_BINDGEN_COMMIT="4b69f3b3ba4212c857be6854f77fa5aec8b62871"
+RING_BRANCH="emscripten"
+RING_COMMIT="6671f7cfbb13f249b571ffa6326275a8596e0ca2"
 GB="https://github.com/guybedford"
 
 clone() { # url ref dir
@@ -24,39 +32,36 @@ clone() { # url ref dir
   fi
 }
 
-echo "==> Cloning emscripten ($EMSCRIPTEN_REF) and workers-rs ($WORKERS_RS_REF)"
-clone "$GB/emscripten"  "$EMSCRIPTEN_REF"  "$WORK/emscripten"
-clone "$GB/workers-rs"  "$WORKERS_RS_REF"  "$WORK/workers-rs"
+pin() { # dir branch commit
+  local dir="$1" branch="$2" commit="$3"
+  git -C "$dir" fetch --filter=blob:none origin "$branch"
+  git -C "$dir" switch --detach "$commit"
+}
 
-echo "==> Populating core workers-rs submodules from guybedford forks"
-WR="$WORK/workers-rs"
-( cd "$WR"
-  for pair in \
-    "wasm-bindgen:$GB/wasm-bindgen" "ts-gen:$GB/ts-gen" "tokio:$GB/tokio" \
-    "libc:$GB/libc" "ring:$GB/ring"; do
-    # Split on the FIRST colon only: the URL contains colons (https://), so a
-    # greedy `##*:` would strip the scheme and yield `//github.com/...`.
-    name="${pair%%:*}"; url="${pair#*:}"
-    git config -f .gitmodules "submodule.$name.url" "$url"
-  done
-  git submodule sync >/dev/null
-  for m in wasm-bindgen tokio libc ring ts-gen; do
-    git -c protocol.version=2 submodule update --init --filter=blob:none "$m"
-  done
-)
+apply() { # dir patch
+  local dir="$1" patch="$2"
+  if git -C "$dir" apply --reverse --check "$patch" 2>/dev/null; then
+    echo "  already applied: $(basename "$patch")"
+  else
+    git -C "$dir" apply --check "$patch"
+    git -C "$dir" apply "$patch"
+  fi
+}
 
-echo "==> Applying tokio patch (adds the emscripten UdpSocket module + wiring)"
-( cd "$WR/tokio" && git apply "$REPO/patches/tokio-emscripten-udp.patch" || \
-  echo "  (tokio patch may already be applied)" )
+echo "==> Cloning pinned Emscripten and Rust dependency forks"
+clone "$GB/emscripten" "$EMSCRIPTEN_BRANCH" "$WORK/emscripten"
+clone "$GB/wasm-bindgen" "$WASM_BINDGEN_BRANCH" "$WORK/wasm-bindgen"
+clone "$GB/tokio" "$TOKIO_BRANCH" "$WORK/tokio"
+clone "$GB/libc" "$LIBC_BRANCH" "$WORK/libc"
+clone "$GB/ring" "$RING_BRANCH" "$WORK/ring"
+pin "$WORK/emscripten" "$EMSCRIPTEN_BRANCH" "$EMSCRIPTEN_COMMIT"
+pin "$WORK/wasm-bindgen" "$WASM_BINDGEN_BRANCH" "$WASM_BINDGEN_COMMIT"
+pin "$WORK/tokio" "$TOKIO_BRANCH" "$TOKIO_COMMIT"
+pin "$WORK/libc" "$LIBC_BRANCH" "$LIBC_COMMIT"
+pin "$WORK/ring" "$RING_BRANCH" "$RING_COMMIT"
 
-echo "==> Applying libc patch (adds emscripten in6_pktinfo)"
-# Lets stock quinn-udp's portable unix.rs compile unmodified — see the patch header.
-( cd "$WR/libc" && git apply "$REPO/patches/libc-emscripten-in6_pktinfo.patch" || \
-  echo "  (libc patch may already be applied)" )
-
-echo "==> Applying workers-rs workspace patch (drops goose-only deps/example)"
-( cd "$WR" && git apply "$REPO/patches/workers-rs-workspace-Cargo.toml.patch" || \
-  echo "  (workspace patch may already be applied)" )
+echo "==> Updating wasm-bindgen's tokio export bridge for HostedRuntime"
+apply "$WORK/wasm-bindgen" "$REPO/patches/wasm-bindgen-tokio-hosted-runtime.patch"
 
 echo "==> Configuring emscripten cf toolchain"
 CF="$WORK/emscripten"
@@ -76,53 +81,7 @@ EOF
 echo "  wrote $CF/.emscripten_cf"
 
 echo "==> Building the patched wasm-bindgen CLI (host)"
-( cd "$WR/wasm-bindgen" && cargo build --release -p wasm-bindgen-cli )
-
-# ---------------------------------------------------------------------------
-# quiche demo: clone cloudflare/boring + cloudflare/quiche at the pinned commits,
-# apply this repo's patches, and compile BoringSSL to wasm.
-# ---------------------------------------------------------------------------
-BORING_COMMIT="931385ed41df448c82d150219f69af56e3c8399f"   # cloudflare/boring (~5.2.0)
-QUICHE_COMMIT="c4c0b978461aa153399a90217d85bebd1800f84d"   # cloudflare/quiche 0.29.2-3
-
-echo "==> Cloning cloudflare/boring @ $BORING_COMMIT (+ BoringSSL submodule)"
-BORING="$WORK/boring"
-if [ ! -d "$BORING/.git" ]; then
-  git clone --filter=blob:none "https://github.com/cloudflare/boring" "$BORING"
-  git -C "$BORING" checkout --detach "$BORING_COMMIT"
-  git -C "$BORING" submodule update --init --filter=blob:none boring-sys/deps/boringssl
-else
-  echo "  exists: $BORING"
-fi
-
-echo "==> Cloning cloudflare/quiche @ $QUICHE_COMMIT"
-QUICHE="$WORK/quiche"
-if [ ! -d "$QUICHE/.git" ]; then
-  git clone --filter=blob:none "https://github.com/cloudflare/quiche" "$QUICHE"
-  git -C "$QUICHE" checkout --detach "$QUICHE_COMMIT"
-else
-  echo "  exists: $QUICHE"
-fi
-
-echo "==> Applying quiche patches (local boring path + the -> c_void FFI fix)"
-# Point quiche's `boring` workspace dep at the local checkout, drop the
-# staticlib/cdylib crate-types, and fix the wasm-only `-> c_void` FFI trap.
-git -C "$QUICHE" apply "$REPO/patches/quiche-boringssl/quiche-cargo.patch" \
-  || echo "  (quiche-cargo.patch may already be applied)"
-git -C "$QUICHE" apply "$REPO/patches/quiche-boringssl/quiche-crypto-cvoid-return.patch" \
-  || echo "  (quiche-crypto-cvoid-return.patch may already be applied)"
-
-echo "==> Compiling BoringSSL for wasm32-unknown-emscripten (OPENSSL_NO_ASM)"
-BSSL="$BORING/boring-sys/deps/boringssl"
-if [ -f "$BSSL/build-wasm/libcrypto.a" ] && [ -f "$BSSL/build-wasm/libssl.a" ]; then
-  echo "  exists: $BSSL/build-wasm/{libcrypto,libssl}.a"
-else
-  ( cd "$BSSL" \
-    && EM_CONFIG="$CF/.emscripten_cf" PATH="$CF:$PATH" emcmake cmake -G "Unix Makefiles" \
-         -B build-wasm -DOPENSSL_NO_ASM=ON -DBUILD_SHARED_LIBS=OFF \
-         -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-Wno-error -DCMAKE_CXX_FLAGS=-Wno-error \
-    && EM_CONFIG="$CF/.emscripten_cf" PATH="$CF:$PATH" cmake --build build-wasm --target crypto ssl -j4 )
-fi
+( cd "$WORK/wasm-bindgen" && cargo build --release -p wasm-bindgen-cli )
 
 echo ""
 echo "Setup complete. Run a demo:"

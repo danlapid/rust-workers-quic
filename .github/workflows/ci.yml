@@ -1,7 +1,7 @@
 name: demos
 
 # Proves both QUIC demos end-to-end on Node: builds Rust -> wasm32-unknown-emscripten
-# via the patched toolchain and does a real HTTP/3 GET to cloudflare-quic.com.
+# via the pinned fork toolchain and does a real HTTP/3 GET to cloudflare-quic.com.
 #
 # Runner: macOS. setup.sh clones the guybedford emscripten `cf` fork (the patched
 # frontend) and borrows its LLVM/binaryen/node backend from Homebrew's emscripten
@@ -33,11 +33,11 @@ jobs:
         with:
           node-version: '26'
 
-      # Rust 1.95 (workers-rs pins it via rust-toolchain.toml) + the emscripten target.
-      - name: Install Rust 1.95 + wasm32-unknown-emscripten
+      # Match the repository's dated nightly pin.
+      - name: Install Rust nightly + wasm32-unknown-emscripten
         run: |
-          rustup toolchain install 1.95.0 --profile minimal --target wasm32-unknown-emscripten
-          rustup default 1.95.0
+          rustup toolchain install nightly-2026-07-20 --profile minimal --target wasm32-unknown-emscripten
+          rustup default nightly-2026-07-20
           rustc -V && cargo -V
 
       - name: Install toolchain deps (emscripten backend, libclang, cmake)
@@ -48,9 +48,9 @@ jobs:
           # a libclang.dylib for boring-sys bindgen; `cmake` builds BoringSSL.
           brew install emscripten llvm cmake
 
-      # Cache the heavy, deterministic setup output (forks, patched wasm-bindgen
-      # CLI, BoringSSL-for-wasm) keyed on the inputs that affect it.
-      - name: Cache .work (forks + toolchain + BoringSSL)
+      # Cache the heavy, deterministic setup output (forks and patched
+      # wasm-bindgen CLI) keyed on the inputs that affect it.
+      - name: Cache .work (forks + toolchain)
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/.work
@@ -62,9 +62,9 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: rwq-cargo-${{ runner.os }}-${{ hashFiles('demos/**/Cargo.toml') }}
+          key: rwq-cargo-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'demos/**/Cargo.toml') }}
 
-      - name: Setup (clone forks, apply patches, build wasm-bindgen CLI, BoringSSL)
+      - name: Setup (clone pinned forks, apply patch, build wasm-bindgen CLI)
         run: bash scripts/setup.sh
 
       - name: quinn demo — HTTP/3 GET to cloudflare-quic.com

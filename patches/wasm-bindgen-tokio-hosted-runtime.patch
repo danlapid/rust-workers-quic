@@ -1,0 +1,57 @@
+Patch against guybedford/wasm-bindgen @ emscripten-non-identifier-names
+(4b69f3b3). Tokio's emscripten-layering successor replaced the global private
+event_loop API with public HostedRuntime values. Keep one runtime per export,
+matching the prior persistent-runtime lifecycle.
+
+diff --git a/crates/macro-support/src/codegen.rs b/crates/macro-support/src/codegen.rs
+index 3dba7023..3a00ed73 100644
+--- a/crates/macro-support/src/codegen.rs
++++ b/crates/macro-support/src/codegen.rs
+@@ -940,23 +940,32 @@ impl TryToTokens for ast::Export {
+                             let __wbg_fut = __wbg_fut
+                                 .take()
+                                 .expect("Promise executor invoked more than once");
+-                            ::tokio::emscripten::event_loop::schedule(__wbg_fut, move |__wbg_out| {
+-                                match __wbg_out {
+-                                    ::core::result::Result::Ok(::core::result::Result::Ok(__wbg_val)) => {
+-                                        let _ = resolve.call(&#wasm_bindgen::JsValue::UNDEFINED, (&__wbg_val,));
+-                                    }
+-                                    ::core::result::Result::Ok(::core::result::Result::Err(__wbg_val)) => {
+-                                        let _ = reject.call(&#wasm_bindgen::JsValue::UNDEFINED, (&__wbg_val,));
+-                                    }
+-                                    ::core::result::Result::Err(__wbg_join_err) => {
+-                                        let __wbg_err = #wasm_bindgen::JsValue::from(
+-                                            ::std::format!("exported async task failed: {}", __wbg_join_err)
+-                                        );
+-                                        let _ = reject.call(&#wasm_bindgen::JsValue::UNDEFINED, (&__wbg_err,));
++                            ::std::thread_local! {
++                                static __WBG_TOKIO_RT: ::tokio::runtime::HostedRuntime =
++                                    ::tokio::runtime::Builder::new_current_thread()
++                                        .enable_all()
++                                        .build_hosted_event_loop_runtime()
++                                        .expect("failed to build tokio hosted runtime");
++                            }
++                            __WBG_TOKIO_RT.with(|__wbg_rt| {
++                                __wbg_rt.schedule(__wbg_fut, move |__wbg_out| {
++                                    match __wbg_out {
++                                        ::core::result::Result::Ok(::core::result::Result::Ok(__wbg_val)) => {
++                                            let _ = resolve.call(&#wasm_bindgen::JsValue::UNDEFINED, (&__wbg_val,));
++                                        }
++                                        ::core::result::Result::Ok(::core::result::Result::Err(__wbg_val)) => {
++                                            let _ = reject.call(&#wasm_bindgen::JsValue::UNDEFINED, (&__wbg_val,));
++                                        }
++                                        ::core::result::Result::Err(__wbg_join_err) => {
++                                            let __wbg_err = #wasm_bindgen::JsValue::from(
++                                                ::std::format!("exported async task failed: {}", __wbg_join_err)
++                                            );
++                                            let _ = reject.call(&#wasm_bindgen::JsValue::UNDEFINED, (&__wbg_err,));
++                                        }
+                                     }
+-                                }
++                                });
++                                __wbg_rt.drive();
+                             });
+-                            ::tokio::emscripten::event_loop::drive();
+                         }).into()
+                     }
+                 }

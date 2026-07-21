@@ -1,31 +1,37 @@
-# Dependency branch / commit map
+# Dependency Sources And Pins
 
-Every non-crates.io dependency is pinned to a specific fork + branch + commit. These are
-the versions this POC was proven against; `scripts/setup.sh` clones them.
+This lists the nonstandard dependency sources and noteworthy registry versions used by
+the PoC. Direct checkouts are pinned in `scripts/setup.sh`, Cargo sources in `Cargo.toml`
+and `Cargo.lock`, and Rust in `rust-toolchain.toml`.
 
 ## Toolchain
 
-| Component | Source | Branch | Commit (pinned) | Notes |
+| Component | Source | Revision | Provisioning | Notes |
 | --- | --- | --- | --- | --- |
-| emscripten | `guybedford/emscripten` | `cf` | `e06aa29a8` (`6.0.3-git`) | epoll (`libepoll.js`, `emscripten_epoll_set_callback`), async DNS (`emscripten_dns_lookup_async`), UDP/TCP over `-sNODERAWSOCKETS`, `-sWASM_BINDGEN`. |
-| emscripten backend | Homebrew `emscripten` | — | `6.0.1` | Provides the LLVM/binaryen/node backend the `cf` frontend drives. `setup.sh` auto-detects it from `brew --prefix emscripten`. (emsdk is not used — no installable prebuilt backend for 6.0.x on Apple Silicon.) |
-| Rust | rustup stable | — | `1.95.0` | `rust-toolchain.toml` in workers-rs pins this; `wasm32-unknown-emscripten` target. |
+| emscripten frontend | `guybedford/emscripten` branch `cf` | `08a1fc28569c93a86f9e737bac508332a298615e` (`6.0.3-git`) | Direct clone to `.work/emscripten` | Integrated epoll, async DNS, UDP/TCP over `-sNODERAWSOCKETS`, wasm-bindgen, and blocking socket operations. |
+| emscripten backend | Homebrew `emscripten` | Auto-detected (proven: `6.0.1`) | `brew --prefix emscripten` | Supplies LLVM, binaryen, and Node support to the fork frontend; it is an external host prerequisite rather than a source pin. |
+| Rust | rustup `nightly-2026-07-20` | `1.99.0-nightly` (`9f36de775`) | `rust-toolchain.toml` | Includes the Emscripten fd-cloning support needed by unmodified mio. |
 
-## Rust dependency forks (pinned via `[patch.crates-io]`)
+## Direct Checkouts
 
-| Crate | Source | Branch | Commit | Why |
-| --- | --- | --- | --- | --- |
-| workers-rs (workspace) | `guybedford/workers-rs` | `emscripten` | — | Monorepo that pins the rest via submodules + patch table; hosts the examples. |
-| tokio | `guybedford/tokio` | `emscripten` | `4060fe16508df0503518b5aefd525a2becc79ff2` | Emscripten reactor (JSPI-parked `block_on`, host event loop), `TcpStream`, async `lookup_host`. **We add `UdpSocket`** (see `patches/`). |
-| ring | `guybedford/ring` | `emscripten` | `6671f7cfbb13f249b571ffa6326275a8596e0ca2` | getrandom-backed `SystemRandom`; C core via no-asm fallback. rustls crypto backend. |
-| libc | `guybedford/libc` | `libc-0.2-emscripten` | `016d45207b895a6032366815f92586570ceae917` | Emscripten decls. **This repo adds `in6_pktinfo`** to the emscripten module (`patches/libc-emscripten-in6_pktinfo.patch`) so stock `quinn-udp` compiles — a gap to upstream to Guy. |
-| wasm-bindgen | `guybedford/wasm-bindgen` | `emscripten-non-identifier-names` | `4b69f3b3ba4212c857be6854f77fa5aec8b62871` | `#[wasm_bindgen(tokio)]` (drives async exports on tokio's emscripten event loop) + emscripten descriptor-interpreter fixes. Provides the `wasm-bindgen` CLI (`0.2.126`) used by `-sWASM_BINDGEN=auto`. |
-| ts-gen | `guybedford/ts-gen` | `main` | `b698be710dd2f96e813796d9bac6ebb089c90f0f` | TypeScript binding generation. |
-| socket2 | `rust-lang/socket2` | `master` (upstream) | — | Emscripten support (unreleased upstream); patched in via git. |
-| quinn-udp | crates.io `0.5.15` | — | — | **Stock, unmodified.** A hard dep of quinn; compiles on emscripten once the `libc` fork gains `in6_pktinfo` (`patches/libc-emscripten-in6_pktinfo.patch`) — its GSO/GRO code is `target_os = "linux"`-gated, so that one struct is the only gap. Unused at runtime (we pass quinn an abstract socket). |
+| Crate | Source branch | Commit | Local change |
+| --- | --- | --- | --- |
+| wasm-bindgen | `guybedford/wasm-bindgen@emscripten-non-identifier-names` | `4b69f3b3ba4212c857be6854f77fa5aec8b62871` | `patches/wasm-bindgen-tokio-hosted-runtime.patch` updates the async export bridge to Tokio's public `HostedRuntime` API. |
+| tokio | `guybedford/tokio@emscripten-layering` | `7c1d4977c510866775ed6164b58b2218a6a2955b` | None. Provides the hosted runtime and standard networking over Emscripten mio, including `UdpSocket`. |
+| libc | `guybedford/libc@libc-0.2-emscripten` | `29d4451facf22c9dcc25e3e3f3bc2ba827b278f8` | None. Includes epoll and `in6_pktinfo`. |
+| ring | `guybedford/ring@emscripten` | `6671f7cfbb13f249b571ffa6326275a8596e0ca2` | None. Provides getrandom-backed `SystemRandom` and the no-assembly C fallback. |
 
-## Not needed for the QUIC POC
+## Cargo Git Sources
 
-`arboard`, `fs2-rs`, `sys-info-rs`, `tree-sitter` submodules are only pulled in by the
-unrelated `emscripten-goose` example; they are excluded from the workspace here (see
-`patches/workers-rs-workspace-Cargo.toml.patch`).
+| Crate | Source branch | Commit | Why |
+| --- | --- | --- | --- |
+| mio | `guybedford/mio@emscripten` | `4c43fd5522f5b13a5bc2d4b54bd7f50e698084d1` | Emscripten epoll backend used by Tokio's standard TCP and UDP types. |
+| socket2 | `rust-lang/socket2@master` | `239dd83a4ced08e514d2c38942aab99791119f0d` | Contains unreleased Emscripten support. |
+| quiche | `cloudflare/quiche@master` | `68c23b9dd16068c5b77fbb4d232c92e8bd23505e` | Includes PR #2535's wasm-correct C `void` FFI declarations. |
+
+## Noteworthy Registry Dependencies
+
+| Crate | Version | Notes |
+| --- | --- | --- |
+| `boring` / `boring-sys` | `4.22.0` | quiche's published dependency. `boring-sys` compiles bundled BoringSSL using `cmake/boringssl-emscripten.cmake`; no source patch or prebuild is used. |
+| `quinn-udp` | `0.5.15` | Stock and unmodified. It compiles with Guy's libc but is unused at runtime because the demo passes quinn an abstract single-datagram socket. |

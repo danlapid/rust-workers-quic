@@ -1,7 +1,5 @@
-# The quiche QUIC demo crate. Like the quinn demo (`../quinn_h3/`), it builds
-# inside the patched workers-rs workspace (for the wasm-bindgen fork), copied in
-# by `scripts/run-quiche.sh`. It also needs BoringSSL-for-wasm + the boring-sys
-# bindgen env (see patches/quiche-boringssl/). Not a standalone `cargo build`.
+# The quiche demo is a member of the repository workspace. The run script
+# configures boring-sys to compile its bundled BoringSSL for wasm.
 [package]
 name = "quiche-demo"
 version = "0.1.0"
@@ -12,7 +10,7 @@ name = "quiche-demo"
 path = "src/main.rs"
 
 [dependencies]
-# wasm-bindgen family come from the workers-rs workspace (patched fork).
+# wasm-bindgen comes from Guy's fork with the repository's single source patch.
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 js-sys.workspace = true
@@ -29,14 +27,10 @@ tokio = { version = "1", default-features = false, features = [
 
 # QUIC + HTTP/3 via Cloudflare's quiche, on BoringSSL through the `boring` crate.
 # quiche is sans-I/O: we drive send()/recv() over the emscripten tokio UdpSocket
-# ourselves, so no platform UDP code is involved. This path is rewritten to an
-# absolute vendor path by scripts/run-quiche.sh when copied into the workspace.
-# `boring` is pulled transitively by quiche (its own workspace path dep).
-quiche = { path = "../../vendor/quiche/quiche", default-features = false, features = [
+# ourselves, so no platform UDP code is involved. This revision includes the
+# wasm-correct C void FFI declarations from upstream PR #2535.
+quiche = { git = "https://github.com/cloudflare/quiche", rev = "68c23b9dd16068c5b77fbb4d232c92e8bd23505e", default-features = false, features = [
     "boringssl-boring-crate",
 ] }
 
 anyhow = "1"
-
-[profile.release]
-opt-level = "s"

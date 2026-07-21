@@ -232,7 +232,7 @@ async fn run() -> anyhow::Result<String> {
         .or_else(|| addrs.first().copied())
         .ok_or_else(|| anyhow::anyhow!("no address for {host}"))?;
 
-    // Bind our reactor-backed UDP socket (matching family) and wrap it for quinn.
+    // Bind Tokio's mio-backed UDP socket (matching family) and wrap it for quinn.
     let bind_addr = if addr.is_ipv4() { "0.0.0.0:0" } else { "[::]:0" };
     let sock = UdpSocket::bind(bind_addr).await?;
     log(&format!("bound udp socket at {}", sock.local_addr()?));

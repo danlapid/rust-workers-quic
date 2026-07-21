@@ -1,5 +1,7 @@
-# Vendored forks + toolchain (cloned by scripts/setup.sh, never committed)
+# Legacy/local dependency scratch
 vendor/
+
+# Pinned forks and toolchain state created by scripts/setup.sh
 .work/
 
 # Build output
