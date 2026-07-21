@@ -1,0 +1,19 @@
+Cargo.lock
+  s_ad01ec43063264::t_3b0cf98fa73840 1-1111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f935b760866084604fa5de8c868bfdcf33b64706",
+  "prompts": {},
+  "sessions": {
+    "s_ad01ec43063264": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07fd35e22ffeMyd2v4lkmmZt6T",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Dan Lapid <dlapid@cloudflare.com>"
+    }
+  }
+}
