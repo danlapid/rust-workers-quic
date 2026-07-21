@@ -12,16 +12,6 @@ use wasm_bindgen::prelude::*;
 
 fn main() {}
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console, js_name = log)]
-    fn console_log(s: &str);
-}
-
-fn log(s: &str) {
-    console_log(s);
-}
-
 // The PoC must also work behind TLS-inspecting proxies. Accept the chain path,
 // but still use ring to verify the server's TLS handshake signature.
 #[derive(Debug)]
@@ -90,7 +80,7 @@ pub async fn quic_demo() -> Result<String, JsError> {
 async fn run() -> anyhow::Result<String> {
     let host = "cloudflare-quic.com";
     let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host, 443)).await?.collect();
-    log(&format!("resolved {host} -> {addrs:?}"));
+    println!("resolved {host} -> {addrs:?}");
     let peer = addrs
         .iter()
         .find(|addr| addr.is_ipv4())
@@ -106,7 +96,7 @@ async fn run() -> anyhow::Result<String> {
     let mut endpoint = quinn::Endpoint::client(bind_addr.parse()?)?;
     endpoint.set_default_client_config(client_config()?);
 
-    log(&format!("dialing QUIC {host} at {peer} (ALPN h3)..."));
+    println!("dialing QUIC {host} at {peer} (ALPN h3)...");
     let connection = endpoint.connect(peer, host)?.await?;
     let alpn = connection
         .handshake_data()
@@ -115,7 +105,7 @@ async fn run() -> anyhow::Result<String> {
         .map(|protocol| String::from_utf8_lossy(&protocol).into_owned())
         .unwrap_or_default();
     let rtt = connection.stats().path.rtt;
-    log(&format!("QUIC handshake OK: alpn={alpn}; rtt={rtt:?}"));
+    println!("QUIC handshake OK: alpn={alpn}; rtt={rtt:?}");
 
     let (mut driver, mut requests) = h3::client::new(h3_quinn::Connection::new(connection))
         .await
@@ -127,7 +117,7 @@ async fn run() -> anyhow::Result<String> {
     let request = http::Request::get(format!("https://{host}/"))
         .header("user-agent", "rust-workers-quic/0.1")
         .body(())?;
-    log(&format!("sending HTTP/3 GET https://{host}/ ..."));
+    println!("sending HTTP/3 GET https://{host}/ ...");
     let mut stream = requests
         .send_request(request)
         .await
@@ -162,8 +152,8 @@ async fn run() -> anyhow::Result<String> {
          body={}B first_line={preview:?}",
         body.len()
     );
-    log(&output);
-    log("QUIC-H3-ON-EMSCRIPTEN-OK");
+    println!("{output}");
+    println!("QUIC-H3-ON-EMSCRIPTEN-OK");
 
     drop(requests);
     let _ = drive.await;

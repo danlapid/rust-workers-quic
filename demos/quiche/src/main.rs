@@ -16,16 +16,6 @@ use wasm_bindgen::prelude::*;
 
 fn main() {}
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console, js_name = log)]
-    fn console_log(s: &str);
-}
-
-fn log(s: &str) {
-    console_log(s);
-}
-
 #[wasm_bindgen(tokio)]
 pub async fn quiche_demo() -> Result<String, JsError> {
     run().await.map_err(|e| JsError::new(&format!("{e:#}")))
@@ -34,7 +24,7 @@ pub async fn quiche_demo() -> Result<String, JsError> {
 async fn run() -> anyhow::Result<String> {
     let host = "cloudflare-quic.com";
     let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host, 443)).await?.collect();
-    log(&format!("resolved {host} -> {addrs:?}"));
+    println!("resolved {host} -> {addrs:?}");
     let peer = addrs
         .iter()
         .find(|addr| addr.is_ipv4())
@@ -50,7 +40,7 @@ async fn run() -> anyhow::Result<String> {
     let socket = UdpSocket::bind(bind_addr).await?;
     socket.connect(peer).await?;
 
-    log(&format!("dialing QUIC {host} at {peer} (ALPN h3)..."));
+    println!("dialing QUIC {host} at {peer} (ALPN h3)...");
     let (_connection, mut controller) = tokio::time::timeout(
         Duration::from_secs(30),
         tokio_quiche::quic::connect(socket, Some(host)),
@@ -58,7 +48,7 @@ async fn run() -> anyhow::Result<String> {
     .await
     .map_err(|_| anyhow::anyhow!("QUIC handshake timed out"))?
     .map_err(|error| anyhow::anyhow!("QUIC handshake failed: {error}"))?;
-    log("QUIC handshake and HTTP/3 connection established");
+    println!("QUIC handshake and HTTP/3 connection established");
 
     controller
         .request_sender()
@@ -74,7 +64,7 @@ async fn run() -> anyhow::Result<String> {
             body_writer: None,
         })
         .map_err(|_| anyhow::anyhow!("HTTP/3 driver stopped before accepting request"))?;
-    log(&format!("sent HTTP/3 GET https://{host}/"));
+    println!("sent HTTP/3 GET https://{host}/");
 
     let (status, server, body_len, preview) =
         tokio::time::timeout(Duration::from_secs(30), async {
@@ -143,7 +133,7 @@ async fn run() -> anyhow::Result<String> {
         "HTTP/3 GET OK (tokio-quiche): {host} ({peer}) status={status} server={server:?} \
          body={body_len}B first_line={preview:?}"
     );
-    log(&output);
-    log("QUIC-H3-QUICHE-ON-EMSCRIPTEN-OK");
+    println!("{output}");
+    println!("QUIC-H3-QUICHE-ON-EMSCRIPTEN-OK");
     Ok(output)
 }
