@@ -1,0 +1,19 @@
+Cargo.lock
+  s_45a0eab94dbe49::t_cd6631475b59ca 1302,1404,1790,1792-1793,1795,2866-2871,3114-3116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1c7925ae14a28120c30f63395bbf065b9f699fe9",
+  "prompts": {},
+  "sessions": {
+    "s_45a0eab94dbe49": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0794faea6ffeWhbcEML8mDtsXH",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Dan Lapid <dlapid@cloudflare.com>"
+    }
+  }
+}
