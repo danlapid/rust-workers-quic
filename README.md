@@ -53,9 +53,9 @@ TLS 1.3 is provided by **rustls + ring** in the quinn demo; the quiche demo uses
 ## Why quinn?
 
 `quinn` is the de-facto pure-Rust QUIC implementation, is `tokio`-native, and uses
-`rustls` — the exact TLS stack that already works on emscripten. A small Emscripten patch
-implements the `recvmmsg` syscall used by quinn-udp's normal Unix backend. This keeps
-Quinn and quinn-udp unmodified and needs no C crypto library.
+`rustls` — the exact TLS stack that already works on emscripten. Emscripten implements
+the `recvmmsg` operation used by quinn-udp's normal Unix backend. This keeps Quinn and
+quinn-udp unmodified and needs no C crypto library.
 
 ## Also quiche (BoringSSL)
 
@@ -74,7 +74,7 @@ Emscripten.)
 | --- | --- |
 | `demos/quinn_h3/` | **The quinn demo.** `h3` + `quinn` using its normal Tokio runtime and quinn-udp Unix backend, doing an HTTP/3 GET to `cloudflare-quic.com`. |
 | `demos/quiche/` | **The quiche demo.** `tokio-quiche` + BoringSSL over the Emscripten `tokio::net::UdpSocket`. |
-| `patches/` | Reproducible Emscripten compatibility patches for Emscripten, wasm-bindgen, quanta, and tokio-quiche dependencies. |
+| `patches/` | Reproducible compatibility patches for wasm-bindgen and tokio-quiche dependencies. |
 | `cmake/boringssl-emscripten.cmake` | Selects BoringSSL's portable C implementation and loads the Emscripten CMake toolchain for Cargo's `boring-sys` build. |
 | `scripts/` | `setup.sh` (clone dependencies + apply patches + toolchain), `run-quinn_h3.sh` (quinn demo), `run-quiche.sh` (quiche demo). No user-supplied configuration is required. |
 | `.github/workflows/ci.yml` | CI that provisions the toolchain and runs **both** demos on macOS, asserting the success sentinels. |

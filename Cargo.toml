@@ -16,7 +16,7 @@ wasm-bindgen-futures = { path = ".work/wasm-bindgen/crates/futures" }
 wasm-bindgen-macro-support = { path = ".work/wasm-bindgen/crates/macro-support" }
 wasm-bindgen-shared = { path = ".work/wasm-bindgen/crates/shared" }
 libc = { path = ".work/libc" }
-mio = { git = "https://github.com/guybedford/mio", rev = "4c43fd5522f5b13a5bc2d4b54bd7f50e698084d1" }
+mio = { git = "https://github.com/guybedford/mio", rev = "a62c9e46833fc255c9217ab9aa362c6221ed4401" }
 octets = { path = ".work/quiche-tokio/octets" }
 qlog = { path = ".work/quiche-tokio/qlog" }
 quanta = { path = ".work/quanta" }

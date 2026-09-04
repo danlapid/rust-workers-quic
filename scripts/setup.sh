@@ -3,7 +3,7 @@
 # emscripten `cf` toolchain, and build the patched wasm-bindgen CLI.
 #
 # No configuration needed — just:  bash scripts/setup.sh
-# Idempotent: safe to re-run; existing clones are repinned and patches are detected.
+# Idempotent at the selected revisions; clean existing clones are repinned and patches are detected.
 # Requires: git, rustup, python3, node, and Homebrew's `emscripten` package.
 # The quiche demo additionally needs Homebrew `llvm` and `cmake`.
 set -euo pipefail
@@ -14,17 +14,17 @@ mkdir -p "$WORK"
 
 # Pinned branch heads — see docs/branch-map.md.
 EMSCRIPTEN_BRANCH="cf"
-EMSCRIPTEN_COMMIT="08a1fc28569c93a86f9e737bac508332a298615e"
+EMSCRIPTEN_COMMIT="21166256c4c4d73d39b3685c8973d7cbe427ce8c"
 TOKIO_BRANCH="emscripten-layering"
 TOKIO_COMMIT="7c1d4977c510866775ed6164b58b2218a6a2955b"
 LIBC_BRANCH="libc-0.2-emscripten"
-LIBC_COMMIT="29d4451facf22c9dcc25e3e3f3bc2ba827b278f8"
+LIBC_COMMIT="4091fe0b0dc5f9c1a27bed75be1ff02bb27e756d"
 WASM_BINDGEN_BRANCH="emscripten-non-identifier-names"
 WASM_BINDGEN_COMMIT="4b69f3b3ba4212c857be6854f77fa5aec8b62871"
 RING_BRANCH="emscripten"
 RING_COMMIT="6671f7cfbb13f249b571ffa6326275a8596e0ca2"
-QUANTA_BRANCH="v0.12.6"
-QUANTA_COMMIT="0f81349c223854136113e634cf8dd6cd85569880"
+QUANTA_BRANCH="main"
+QUANTA_COMMIT="bb6ca3f82b0b0cfbd7c04a0221f82e63d06a47ed"
 QUICHE_TOKIO_BRANCH="0.29.3"
 QUICHE_TOKIO_COMMIT="55886df3be579579207104c8e645825b6347a209"
 GB="https://github.com/guybedford"
@@ -44,13 +44,11 @@ pin() { # dir branch commit
 
 apply() { # dir patch
   local dir="$1" patch="$2"
-  PATCH_WAS_APPLIED=0
   if git -C "$dir" apply --reverse --check "$patch" 2>/dev/null; then
     echo "  already applied: $(basename "$patch")"
   else
     git -C "$dir" apply --check "$patch"
     git -C "$dir" apply "$patch"
-    PATCH_WAS_APPLIED=1
   fi
 }
 
@@ -70,15 +68,8 @@ pin "$WORK/ring" "$RING_BRANCH" "$RING_COMMIT"
 pin "$WORK/quanta" "$QUANTA_BRANCH" "$QUANTA_COMMIT"
 pin "$WORK/quiche-tokio" "$QUICHE_TOKIO_BRANCH" "$QUICHE_TOKIO_COMMIT"
 
-echo "==> Enabling recvmmsg over the Node socket backend"
-apply "$WORK/emscripten" "$REPO/patches/emscripten-recvmmsg.patch"
-EMSCRIPTEN_PATCH_WAS_APPLIED="$PATCH_WAS_APPLIED"
-
 echo "==> Updating wasm-bindgen's tokio export bridge for HostedRuntime"
 apply "$WORK/wasm-bindgen" "$REPO/patches/wasm-bindgen-tokio-hosted-runtime.patch"
-
-echo "==> Enabling quanta's POSIX monotonic clock on Emscripten"
-apply "$WORK/quanta" "$REPO/patches/quanta-emscripten-clock.patch"
 
 echo "==> Adapting tokio-quiche dependencies for Emscripten"
 apply "$WORK/quiche-tokio" "$REPO/patches/tokio-quiche-emscripten.patch"
@@ -99,10 +90,6 @@ BINARYEN_ROOT='$EM_PREFIX/libexec/binaryen'
 NODE_JS='$(command -v node)'
 EOF
 echo "  wrote $CF/.emscripten_cf"
-if [ "$EMSCRIPTEN_PATCH_WAS_APPLIED" = 1 ]; then
-  EM_CONFIG="$CF/.emscripten_cf" "$CF/emcc" --clear-cache
-fi
-
 echo "==> Building the patched wasm-bindgen CLI (host)"
 ( cd "$WORK/wasm-bindgen" && cargo build --release -p wasm-bindgen-cli )
 

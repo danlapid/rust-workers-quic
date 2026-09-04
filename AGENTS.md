@@ -44,7 +44,7 @@ loop. That attribute lives in the patched wasm-bindgen fork.
 | --- | --- |
 | `demos/quinn_h3/` (`src/main.rs`, `Cargo.toml`, `.cargo/`, `run_quic.mjs`) | **The quinn demo.** quinn's normal Tokio integration over quinn-udp's Unix socket backend. |
 | `demos/quiche/` | **The quiche demo.** `tokio-quiche` + BoringSSL over the Emscripten `tokio::net::UdpSocket`. |
-| `patches/` | Reproducible Emscripten compatibility patches for Emscripten, wasm-bindgen, quanta, and tokio-quiche dependencies. |
+| `patches/` | Reproducible compatibility patches for wasm-bindgen and tokio-quiche dependencies. |
 | `cmake/boringssl-emscripten.cmake` | Lets Cargo's normal `boring-sys` build select portable BoringSSL C code and the Emscripten toolchain. |
 | `scripts/` | `setup.sh` (clone dependencies + apply patches + toolchain), `run-quinn_h3.sh` (quinn demo), `run-quiche.sh` (quiche demo). No user-supplied configuration is required. |
 | `.github/workflows/ci.yml` | CI (macOS): provisions the toolchain via `setup.sh` and runs **both** demos, asserting the success sentinels. |
@@ -79,7 +79,7 @@ macOS.
   `scripts/run-quinn_h3.sh` / `scripts/run-quiche.sh` set the target environment, build the
   corresponding workspace package, and run it. `run-quiche.sh` also sets the BoringSSL CMake and bindgen environment
   (see `docs/quiche-boringssl.md`).
-- Toolchain: Guy's `emscripten @ cf` (`emcc 6.0.3-git`) frontend driving an LLVM/binaryen/node
+- Toolchain: Guy's `emscripten @ cf` (`emcc 6.0.7-git`) frontend driving an LLVM/binaryen/node
   backend borrowed from a system emscripten — `setup.sh` auto-detects Homebrew's (proven:
   the 6.0.1 backend). emsdk is NOT used: it has no installable prebuilt backend for these
   versions on Apple Silicon. Rust nightly 2026-07-20 with the
@@ -96,9 +96,9 @@ former custom `udp_emscripten.rs` and libc patches.
 
 ### QUIC library choice
 **quinn** (`demos/quinn_h3/src/main.rs`) — the de-facto pure-Rust QUIC impl, tokio-native, uses **rustls**.
-It uses the normal `Endpoint::client` and Tokio runtime. The local Emscripten patch implements
-the `recvmmsg` syscall selected by quinn-udp's generic Unix backend, so quinn-udp itself is
-unmodified. TLS is **rustls + ring**
+It uses the normal `Endpoint::client` and Tokio runtime. Emscripten implements the `recvmmsg`
+operation selected by quinn-udp's generic Unix backend, so quinn-udp itself is unmodified.
+TLS is **rustls + ring**
 (ring builds via its no-asm fallback + a getrandom `SystemRandom`).
 
 **quiche** (`demos/quiche/`) — Cloudflare's own QUIC/H3, TLS via **BoringSSL** (the `boring`
@@ -118,9 +118,9 @@ intractable on Emscripten.
   wasm-bindgen ESM output (it's a browser-only/experimental flag).
 - **Don't name a wasm-bindgen export `run`** — it collides with emscripten's internal
   runtime `run()` (`AssertionError: runtimeElements contains library symbol: $run`).
-- **quinn-udp's Unix path requires `recvmmsg`.** Emscripten is `cfg(unix)`; the local
-  Emscripten patch implements batched receives over its existing `recvmsg` backend and
-  completes the `msghdr` fields quinn-udp reads.
+- **quinn-udp's Unix path requires `recvmmsg`.** Emscripten is `cfg(unix)`; upstream
+  implements batched receives over its existing `recvmsg` backend and completes the
+  `msghdr` fields quinn-udp reads.
 - **emcc link flags go through `rustc -Clink-arg=…`**, not `EMCC_CFLAGS` — the latter also
   applies to C compiles (e.g. ring), where a link-only flag is `-Wunused-command-line-argument`
   and `-Werror` makes it fatal.
@@ -154,8 +154,7 @@ See `docs/branch-map.md` for every nonstandard dependency source and pin.
 - ✅ BoringSSL compiled to wasm; `tokio-quiche` GET on Node — 200 OK (second demo).
 - ✅ Cargo builds quiche's published `boring` dependency and bundled BoringSSL for wasm.
 - ✅ Tokio UDP and libc `in6_pktinfo` are present in the pinned Guy Bedford branches.
-- ⬜ Upstream the remaining BoringSSL Emscripten build configuration and the Emscripten
-  `recvmmsg` patch.
+- ⬜ Upstream the remaining BoringSSL Emscripten build configuration.
 - ⬜ Same crate on Cloudflare Workers, once the runtime exposes `node:dgram`.
 - ⬜ Single-datagram UDP only (no GSO/GRO) — a perf follow-up.
 
